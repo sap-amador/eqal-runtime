@@ -125,7 +125,7 @@ def mature(tid: str = Depends(tenant), days: int = MATURITY_DAYS):
     return {"matured": n}
 
 @app.get("/v1/ledger")
-def ledger(tid: str = Depends(tenant), limit: int = Query(50, le=500), human_only: bool = False, case_id: str | None = None):
+def ledger(tid: str = Depends(tenant), limit: int = Query(50, le=20000), human_only: bool = False, case_id: str | None = None):
     recs = _latest(tid, case_id)
     if human_only: recs = [r for r in recs if r.get("human")]
     return recs[-limit:]

@@ -69,3 +69,27 @@ Retrospective run:
     curl -H "X-API-Key: <key>" -X POST "localhost:8000/v1/mature?days=0"     # historical outcomes are already mature
     curl -H "X-API-Key: <key>" localhost:8000/v1/pnl/report > readout.html
     curl -H "X-API-Key: <key>" "localhost:8000/v1/graduation?min_mature=200"
+
+## v0.5 — Level 1: real intelligence, measured (plan steps 3.1–3.3)
+- `gateway/mistral.env.example` — call Mistral directly (OpenAI-compatible); LiteLLM returns at 2.2 for per-tenant allowlists.
+- `scripts/gen_cases.py` — realistic synthetic AP world with documents: invoices with line items, POs, contracted
+  price lists, goods receipts, bank-change letters with vendor history; injected anomalies. Models must read and judge.
+- `app/adapters_ap.py` — real deterministic adapter: three-way match with tolerance, duplicate hash, bank-change
+  detection, rule candidates for the classification ladder, and the evidence pack (only pack evidence fields; no real IBAN).
+- `app/providers.py` — gateway provider now sends the evidence pack with a per-class task, JSON mode, retries on 429/5xx,
+  records tokens, latency and the model's one-sentence reason. Confidence is the model's self-report (adapter id
+  `self-report-v1`); its calibration is *measured*, not assumed.
+- `scripts/measure.py` — runs cases, appends outcomes, and writes `calibration.json` / `calibration.md`: per class
+  accuracy, confidence calibration by bucket, tokens, measured cost per call (from EQAL_PRICE_*), latency, failures.
+
+Run (local, SQLite):
+    set -a; source gateway/mistral.env.example; set +a; export EQAL_GATEWAY_KEY=<your key>
+    EQAL_BOOTSTRAP_TENANT=demo EQAL_BOOTSTRAP_API_KEY=demo-key uvicorn app.main:app --port 8000 --log-level warning &
+    python3 scripts/gen_cases.py --n 2000 --seed 11 --out cases.jsonl
+    EQAL_URL=http://localhost:8000 EQAL_API_KEY=demo-key python3 scripts/measure.py --cases cases.jsonl --limit 200   # first: 200 cases, ~EUR 0.10
+    EQAL_URL=http://localhost:8000 EQAL_API_KEY=demo-key python3 scripts/measure.py --cases cases.jsonl               # then all 2,000, ~EUR 1
+    curl -H "X-API-Key: demo-key" localhost:8000/v1/pnl/report > report-real.html
+
+What is now measured: accuracy, confidence calibration, cost, latency, escalation rates, shadow attribution.
+What is still synthetic: the cases and their ground truth. What is still a stub: class S (verification service).
+After the 2,000-case run, `calibration.md` replaces the assumed constants in the packs and on the site, dated.

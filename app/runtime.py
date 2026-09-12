@@ -34,6 +34,8 @@ class Invocation:
     tokens_out: int = 0
     adapter_id: str | None = None
     provider_region: str | None = None
+    elapsed_ms: int = 0
+    reason: str = ""
 
 class Provider(Protocol):
     def invoke(self, icls: str, exception_class: str, case: "Case") -> Invocation: ...
@@ -124,7 +126,8 @@ class Runtime:
             tokens["tokens_in"] += r.tokens_in; tokens["tokens_out"] += r.tokens_out
             if r.adapter_id: adapters.add(r.adapter_id)
             if r.provider_region: regions.add(r.provider_region)
-            step = dict(level=level + 1, cls=icls, outcome_code=r.outcome_code, verdict=r.verdict, confidence=round(r.confidence, 4), cost=spec["cost"])
+            step = dict(level=level + 1, cls=icls, outcome_code=r.outcome_code, verdict=r.verdict, confidence=round(r.confidence, 4), cost=spec["cost"],
+                        tokens_in=r.tokens_in, tokens_out=r.tokens_out, elapsed_ms=r.elapsed_ms, reason=r.reason)
             path.append(step)
             if r.outcome_code != "OK":                                       # policy-specified failure handling: no implicit escalation
                 reason = f"invocation_{r.outcome_code.lower()}"; break

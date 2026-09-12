@@ -1,0 +1,74 @@
+{
+ "D": {
+  "calls": 1717,
+  "failures": 0,
+  "accuracy": 0.8753640069889342,
+  "mean_tokens_in": 0,
+  "mean_tokens_out": 0,
+  "measured_cost_usd": 0.0,
+  "mean_latency_ms": 0,
+  "calibration": {
+   "0.50": {
+    "n": 203,
+    "accuracy": 0.0
+   },
+   "0.95": {
+    "n": 1514,
+    "accuracy": 0.993
+   }
+  }
+ },
+ "L": {
+  "calls": 410,
+  "failures": 0,
+  "accuracy": 0.5024390243902439,
+  "mean_tokens_in": 644,
+  "mean_tokens_out": 44,
+  "measured_cost_usd": 0.000123,
+  "mean_latency_ms": 1274,
+  "calibration": {
+   "0.95": {
+    "n": 410,
+    "accuracy": 0.502
+   }
+  }
+ },
+ "S": {
+  "calls": 76,
+  "failures": 0,
+  "accuracy": 0.18421052631578946,
+  "mean_tokens_in": 0,
+  "mean_tokens_out": 0,
+  "measured_cost_usd": 0.0,
+  "mean_latency_ms": 0,
+  "calibration": {
+   "0.00": {
+    "n": 76,
+    "accuracy": 0.184
+   }
+  }
+ },
+ "F": {
+  "calls": 78,
+  "failures": 0,
+  "accuracy": 0.7307692307692307,
+  "mean_tokens_in": 863,
+  "mean_tokens_out": 52,
+  "measured_cost_usd": 0.000509,
+  "mean_latency_ms": 1910,
+  "calibration": {
+   "0.85": {
+    "n": 53,
+    "accuracy": 0.604
+   },
+   "0.90": {
+    "n": 7,
+    "accuracy": 1.0
+   },
+   "0.95": {
+    "n": 18,
+    "accuracy": 1.0
+   }
+  }
+ }
+}
