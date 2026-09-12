@@ -2,18 +2,23 @@
 Every write is an INSERT of a new record version. Reports read the latest version per case."""
 import os, json, hashlib, hmac, statistics as st, datetime as dt
 from pathlib import Path
-from fastapi import FastAPI, Depends, HTTPException, Header, Query
+from fastapi import FastAPI, Depends, HTTPException, Header, Query, UploadFile, File
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, text
 from .db import Session, Tenant, Record, init_db, engine
 from .runtime import Runtime, Case, load_policy, seal, AUT
 from .providers import get_provider
+from .workflow import workflow as _workflow, render_workflow
 
 if os.getenv("SENTRY_DSN"):
     import sentry_sdk; sentry_sdk.init(dsn=os.environ["SENTRY_DSN"], send_default_pii=False)
 
-app = FastAPI(title="EQAL runtime", version="0.4")
+app = FastAPI(title="EQAL runtime", version="0.5.1")
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in os.getenv("EQAL_CORS_ORIGINS", "https://eqal.net,https://www.eqal.net,http://localhost:8080,null").split(",")],
+                   allow_methods=["GET", "POST"], allow_headers=["X-API-Key", "Content-Type"])
+PRICE = {c: (float(os.getenv(f"EQAL_PRICE_{c}_IN", "0")), float(os.getenv(f"EQAL_PRICE_{c}_OUT", "0"))) for c in ("D", "S", "L", "F", "M")}
 PACK_NAME = os.getenv("EQAL_POLICY_PACK", "ap")
 POLICY = load_policy(PACK_NAME)
 RUNTIME = Runtime(POLICY, get_provider(os.getenv("EQAL_PROVIDER", "simulated")))
@@ -237,12 +242,71 @@ def graduation(tid: str = Depends(tenant), min_mature: int = Query(200), basis: 
                         status=("PROPOSED - requires human approval of a new pack version" if ok else "insufficient evidence")))
     return dict(pack=f"{POLICY['pack']}/{POLICY['version']}", proposals=out)
 
+@app.get("/v1/manifest")
+def manifest(tid: str = Depends(tenant)):
+    """Run manifest: every provider, adapter and region that took part, with calls, failures, tokens,
+    measured cost (from EQAL_PRICE_*), latency. This is the compliance view of a run."""
+    recs = _latest(tid); rows = {}
+    for r in recs:
+        for s in r["path"]:
+            if s["cls"] in ("D", "S"): prov = next((a for a in (r.get("adapter_ids") or []) if not a.startswith("gw-") and not a.startswith("sim-")), "adapter")
+            else:
+                models = getattr(RUNTIME.prov, "models", {}); prov = f"gw-{models[s['cls']]}:self-report-v1" if s["cls"] in models else f"sim-{s['cls']}"
+            key = (s["cls"], prov)
+            row = rows.setdefault(key, dict(cls=s["cls"], provider=key[1], region=",".join(r.get("provider_regions") or ["local"]), calls=0, failures=0, tokens_in=0, tokens_out=0, ms=0, ok_ms=0, failure_codes={}))
+            row["calls"] += 1
+            if s["outcome_code"] != "OK":
+                row["failures"] += 1; row["failure_codes"][s["outcome_code"]] = row["failure_codes"].get(s["outcome_code"], 0) + 1; continue
+            row["tokens_in"] += s.get("tokens_in", 0); row["tokens_out"] += s.get("tokens_out", 0); row["ms"] += s.get("elapsed_ms", 0); row["ok_ms"] += 1
+    out = []
+    for row in rows.values():
+        pin, pout = PRICE.get(row["cls"], (0, 0)); ok = row["calls"] - row["failures"]
+        out.append(dict(**row, mean_tokens_in=round(row["tokens_in"] / ok) if ok else 0, mean_tokens_out=round(row["tokens_out"] / ok) if ok else 0,
+                        measured_cost_total_usd=round((row["tokens_in"] * pin + row["tokens_out"] * pout) / 1e6, 4),
+                        measured_cost_per_call_usd=round((row["tokens_in"] * pin + row["tokens_out"] * pout) / 1e6 / ok, 6) if ok else None,
+                        mean_latency_ms=round(row["ms"] / row["ok_ms"]) if row["ok_ms"] else None))
+    versions = sorted({a for r in recs for a in (r.get("adapter_ids") or [])})
+    return dict(n=len(recs), pack=f"{POLICY['pack']}/{POLICY['version']}", provider=type(RUNTIME.prov).__name__, price_table_usd_per_mtok=PRICE,
+                regions=sorted({x for r in recs for x in (r.get("provider_regions") or [])}), adapter_ids=versions,
+                data_left_the_adapter=["evidence fields named in the policy pack only"], rows=sorted(out, key=lambda x: x["cls"]),
+                total_measured_cost_usd=round(sum(x["measured_cost_total_usd"] for x in out), 4))
+
+@app.get("/v1/pnl/workflow", response_class=HTMLResponse)
+def workflow_report(tid: str = Depends(tenant)):
+    recs = _latest(tid)
+    if not recs: return "<p>No decisions yet.</p>"
+    w = _workflow(recs, POLICY, PRICE, POLICY["human_touch_cost"])
+    return render_workflow(w, f"{PACK_TITLES.get(POLICY['pack'], POLICY['pack'])}: {len(recs):,} decisions, policy pack v{POLICY['version']}")
+
+@app.get("/v1/workflow")
+def workflow_json(tid: str = Depends(tenant)):
+    recs = _latest(tid); return _workflow(recs, POLICY, PRICE, POLICY["human_touch_cost"]) if recs else dict(n=0)
+
+@app.post("/v1/ingest/csv")
+async def ingest_csv(file: UploadFile = File(...), tid: str = Depends(tenant), observe_only: bool = True, minutes: float = 6.0,
+                     rate_clerk: float = 48, rate_supervisor: float = 75, rate_treasury: float = 90):
+    """Feed history from the front-end: invoices.csv in the export-spec format. Runs each row through the
+    runtime (observe-only by default) and appends the outcome from the resolution code. Returns the P&L."""
+    from .retro import rows_from_csv, to_case, to_outcome, APPROVE_RIGHT, REJECT_RIGHT
+    text_ = (await file.read()).decode("utf-8", errors="replace"); n = skipped = 0
+    for row in rows_from_csv(text_):
+        res = (row.get("resolution") or "").strip().upper()
+        if res not in APPROVE_RIGHT | REJECT_RIGHT: skipped += 1; continue
+        body, truth = to_case(row, 5.0)
+        if _latest(tid, body["case_id"]): skipped += 1; continue
+        case = Case(body["case_id"], body["input_refs"], body["signals"], body["flags"], None, body["harm_class"], body["reversible"], body["evidence_hashes"])
+        rec = seal(RUNTIME.decide(case, tid, observe_only=observe_only)); rec["input_refs"] = {k: v for k, v in rec["input_refs"].items() if not k.startswith("_")}
+        _insert(rec, tid)
+        o = to_outcome(row, truth, rec, dict(clerk=rate_clerk, supervisor=rate_supervisor, treasury=rate_treasury), minutes)
+        outcome(body["case_id"], OutcomeIn(**o), tid); n += 1
+    return dict(ingested=n, skipped=skipped, pnl={k: v for k, v in _pnl(tid).items() if k not in ("by_class", "sample")})
+
 @app.get("/v1/pnl/report", response_class=HTMLResponse)
-def report(tid: str = Depends(tenant)): return render(_pnl(tid))
+def report(tid: str = Depends(tenant)): return render(_pnl(tid), manifest(tid))
 
 # ---------------------------------------------------------------- report
 def eur(x): return f"€{x:,.2f}"
-def render(s):
+def render(s, man=None):
     tpl = (Path(__file__).parent / "report_template.html").read_text()
     if s.get("n", 0) == 0: return tpl.replace("{{N}}", "0").replace("{{FINDING}}", "<p class=note>No decisions yet.</p>")
     att = next(iter(s["attribution"].values()), None)
@@ -275,5 +339,9 @@ def render(s):
            "{{UNIT}}": UNITS.get(POLICY["pack"], "case"), "{{UNIT_CAP}}": UNITS.get(POLICY["pack"], "case").capitalize(), "{{RANGE}}": s.get("range", ""), "{{GRID_ROWS}}": rows, "{{LEDGER_ROWS}}": lrows,
            "{{POLICY_VERSION}}": str(POLICY["version"]),
            "{{CONSERVATIVE}}": f"{s['conservative']} conservatively routed (€{s['conservative_cost']:.2f}, {s['conservative_caught']} impersonation attempts among them); {s['lens_demoted']} demoted by the risk lens; spend by maturity: pending €{s['spend_by_maturity']['PENDING']:.2f}, observed €{s['spend_by_maturity']['OBSERVED']:.2f}, mature €{s['spend_by_maturity']['MATURE']:.2f}."}
+    mrows = "".join(f"<tr><td>{x['cls']}</td><td>{x['provider']}</td><td>{x['region']}</td><td class=num>{x['calls']}</td><td class=num>{x['failures']}{(' (' + ', '.join(f'{k} x{v}' for k, v in x['failure_codes'].items()) + ')') if x['failure_codes'] else ''}</td>"
+                    f"<td class=num>{x['mean_tokens_in']}/{x['mean_tokens_out']}</td><td class=num>{('$%.5f' % x['measured_cost_per_call_usd']) if x['measured_cost_per_call_usd'] is not None else '—'}</td><td class=num>${x['measured_cost_total_usd']:.4f}</td><td class=num>{x['mean_latency_ms'] or '—'} ms</td></tr>" for x in (man or {}).get("rows", []))
+    rep["{{MANIFEST_ROWS}}"] = mrows
+    rep["{{MANIFEST_NOTE}}"] = (f"Regions: {', '.join(man['regions']) or 'local only'}. Adapters and models: {', '.join(man['adapter_ids']) or '—'}. Data leaving the adapter: {man['data_left_the_adapter'][0]}. Total measured model cost: ${man['total_measured_cost_usd']:.4f}." if man else "")
     for k, v in rep.items(): tpl = tpl.replace(k, v)
     return tpl

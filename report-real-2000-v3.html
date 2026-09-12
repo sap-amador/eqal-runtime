@@ -32,51 +32,51 @@ table.grid td,table.ledger td{border-bottom:1px solid var(--rule);padding:9px 8p
 td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.flag td{background:#fbf1ef}
 .wrap{overflow-x:auto}p.lede{margin:0 0 18px;max-width:62ch}
 </style></head><body><main>
-<header><h1>{{PACK_TITLE}}<small>Intelligence P&amp;L — {{PROVIDER_LABEL}}, policy pack v{{POLICY_VERSION}}</small></h1><div class="period">{{N}} {{UNIT}}s · {{RANGE}}<br><a href="/v1/pnl/workflow" class="ui" style="font-size:13px">Graphical workflow takedown &rarr;</a></div></header>
+<header><h1>Accounts payable<small>Intelligence P&amp;L — live run, policy pack v0.4</small></h1><div class="period">2,000 invoices · 12 Sep 2026 to 12 Sep 2026</div></header>
 <nav class="ui" role="tablist"><button role="tab" aria-selected="true" id="t-bill">The bill</button><button role="tab" aria-selected="false" id="t-grid">Policy grid</button><button role="tab" aria-selected="false" id="t-ledger">Autonomy ledger</button><button role="tab" aria-selected="false" id="t-manifest">Providers and services</button></nav>
 
 <section id="v-bill" role="tabpanel">
 <table class="stmt">
 <tr class="group"><td>Volume</td><td></td></tr>
-<tr><td>{{UNIT_CAP}}s processed</td><td>{{N}}</td></tr>
-{{TOUCHLESS_ROWS}}
-<tr class="sub"><td>Correct business outcome</td><td>{{CORRECT}}</td></tr>
+<tr><td>Invoices processed</td><td>2,000</td></tr>
+<tr class="sub"><td>Touchless invoice processing</td><td>94.5%</td></tr><tr class="sub"><td>Escalated to a person</td><td>5.5%</td></tr>
+<tr class="sub"><td>Correct business outcome</td><td>99.30% (2000 judged)</td></tr>
 <tr class="group"><td>What deciding cost <span class="tag">observed</span></td><td></td></tr>
-<tr><td>AI intelligence spend</td><td>{{AI}}</td></tr>
-<tr><td>People handling exceptions</td><td>{{HUMAN}}</td></tr>
-<tr class="sum"><td>Total decision cost</td><td>{{TOTAL}}</td></tr>
-<tr class="sub"><td>Per {{UNIT}}</td><td>{{PER}}</td></tr>
+<tr><td>AI intelligence spend</td><td>€5.06</td></tr>
+<tr><td>People handling exceptions</td><td>€1,496.00</td></tr>
+<tr class="sum"><td>Total decision cost</td><td>€1,501.07</td></tr>
+<tr class="sub"><td>Per invoice</td><td>€0.751</td></tr>
 <tr class="group"><td>Realized value <span class="tag">observed</span></td><td></td></tr>
-<tr><td>Bank-impersonation payments held ({{BLOCKED}} cases)</td><td class="gain">{{EXPOSURE}}</td></tr>
-<tr class="total"><td>Loss avoided, confirmed</td><td class="gain">{{EXPOSURE}}</td></tr>
+<tr><td>Bank-impersonation payments held (14 cases)</td><td class="gain">€185,526.05</td></tr>
+<tr class="total"><td>Loss avoided, confirmed</td><td class="gain">€185,526.05</td></tr>
 <tr class="group"><td>Not counted above <span class="tag">estimated</span></td><td></td></tr>
-<tr><td>Capacity value vs. one human touch per {{UNIT}} at {{MANUAL_PER}}</td><td>{{CAPACITY}}</td></tr>
+<tr><td>Capacity value vs. one human touch per invoice at €8.00</td><td>€14,504.00</td></tr>
 <tr class="sub"><td class="note">Counted only once the CFO confirms redeployment or headcount effect</td><td></td></tr>
 </table>
-<p class="note" style="margin-top:10px">Autonomy NONE on {{REFUSED}} cases regardless of confidence. {{OVERRIDES}} human overrides, all logged. {{CONSERVATIVE}}</p>
+<p class="note" style="margin-top:10px">Autonomy NONE on 76 cases regardless of confidence. 22 human overrides, all logged. 0 conservatively routed (€0.00, 0 impersonation attempts among them); 0 demoted by the risk lens; spend by maturity: pending €0.00, observed €5.06, mature €0.00.</p>
 
-{{FINDING}}
+<div class="finding" style="border-left-color:#C77700"><h2>€0.04 unproven <span class="tag">counterfactual, not yet matured</span></h2><p>1 escalated cases; shadow accuracy 100.0% is above the 98% threshold on observed outcomes, but none has matured. Neither waste nor justified until it does.</p></div>
 
-{{BASELINE_BOX}}
+
 </section>
 
 <section id="v-grid" role="tabpanel" hidden>
 <p class="lede ui">Read straight from <code>policy_ap.yaml</code>. Intelligence budget on the left, authority on the right; they are independent by design.</p>
 <div class="wrap"><table class="grid ui"><thead><tr><th>Class</th><th>Max cost</th><th>Confidence</th><th>Evidence required</th><th>Autonomy ceiling</th><th>Person</th><th>This run</th></tr></thead>
-<tbody>{{GRID_ROWS}}</tbody></table></div>
+<tbody><tr><td>clean match</td><td class=num>€0.001</td><td class=num>98%</td><td>PO, GR, invoice</td><td>ACT</td><td>ap_clerk ×1 (budget_or_ceiling)</td><td class=num>1717 · €0.000 avg · 100% touchless</td></tr><tr><td>price variance</td><td class=num>€0.002</td><td class=num>98%</td><td>PO, price_list, last_3_invoices</td><td>ACT_NOTIFY if rule, else RECOMMEND</td><td>ap_supervisor ×1 (budget_or_ceiling)</td><td class=num>207 · €0.004 avg · 84% touchless</td></tr><tr><td>bank detail change</td><td class=num>no limit</td><td class=num>99%</td><td>callback_confirmation, portal_confirmation</td><td>NONE</td><td>treasury ×2 (always)</td><td class=num>76 · €0.055 avg · 0% touchless</td></tr></tbody></table></div>
 <p class="note ui" style="margin-top:14px">Effective autonomy = min(policy ceiling, risk-lens ceiling): the lens can lower authority, never raise it. Validation is checked before the budget gate. Unlimited budget on bank-detail changes; autonomy NONE.</p>
 </section>
 
 <section id="v-ledger" role="tabpanel" hidden>
 <p class="lede ui">First six records that involved a person. One record per case; version 2 supersedes version 1 when the outcome is observed. Each carries the classification evidence, path, budget, risk score, effective autonomy, human rule and outcome.</p>
 <div class="wrap"><table class="ledger ui"><thead><tr><th>Invoice</th><th>Class</th><th>Path</th><th>Cost</th><th>Confidence</th><th>Action</th><th>Person</th><th>Outcome</th></tr></thead>
-<tbody>{{LEDGER_ROWS}}</tbody></table></div>
+<tbody><tr><td>H-6d1b934399</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>95.0%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>posted ok · observed</td></tr><tr class=flag><td>H-39a5f50576</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>85.0%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>impersonation blocked · observed</td></tr><tr><td>H-ce5fce1bea</td><td>price variance</td><td>L</td><td class=num>€0.004</td><td class=num>98.0%</td><td>recommend (RECOMMEND)</td><td>ap_supervisor ×1</td><td>rejected ok · observed</td></tr><tr><td>H-a40b6626e8</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>85.0%</td><td>enqueue (NONE)</td><td>treasury ×2 (override)</td><td>posted ok · observed</td></tr><tr><td>H-33fe61903c</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>95.0%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>posted ok · observed</td></tr><tr><td>H-6a37261af0</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>85.0%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>posted ok · observed</td></tr></tbody></table></div>
 </section>
 <section id="v-manifest" role="tabpanel" hidden>
 <p class="lede ui">Every provider, adapter and region that took part in this run, with what it was asked, what it cost, how long it took, and where it failed. This is the compliance view: which model, which region, what left the adapter.</p>
 <div class="wrap"><table class="ledger ui"><thead><tr><th>Class</th><th>Provider / adapter</th><th>Region</th><th>Calls</th><th>Failures</th><th>Tokens in/out (mean)</th><th>Measured cost per call</th><th>Measured cost total</th><th>Latency (mean)</th></tr></thead>
-<tbody>{{MANIFEST_ROWS}}</tbody></table></div>
-<p class="note ui" style="margin-top:14px">{{MANIFEST_NOTE}}</p>
+<tbody><tr><td>D</td><td>ap-deterministic-v0.5</td><td>local</td><td class=num>1717</td><td class=num>0</td><td class=num>0/0</td><td class=num>$0.00000</td><td class=num>$0.0000</td><td class=num>— ms</td></tr><tr><td>F</td><td>gw-mistral-large-latest:self-report-v1</td><td>eu</td><td class=num>77</td><td class=num>0</td><td class=num>869/53</td><td class=num>$0.00051</td><td class=num>$0.0395</td><td class=num>1761 ms</td></tr><tr><td>L</td><td>gw-mistral-small-latest:self-report-v1</td><td>eu</td><td class=num>210</td><td class=num>0</td><td class=num>756/56</td><td class=num>$0.00015</td><td class=num>$0.0309</td><td class=num>1111 ms</td></tr><tr><td>S</td><td>ap-deterministic-v0.5</td><td>eu</td><td class=num>76</td><td class=num>0</td><td class=num>0/0</td><td class=num>$0.00000</td><td class=num>$0.0000</td><td class=num>— ms</td></tr></tbody></table></div>
+<p class="note ui" style="margin-top:14px">Regions: eu. Adapters and models: ap-deterministic-v0.5, gw-mistral-large-latest:self-report-v1, gw-mistral-small-latest:self-report-v1. Data leaving the adapter: evidence fields named in the policy pack only. Total measured model cost: $0.0704.</p>
 </section>
 </main>
 <script>
