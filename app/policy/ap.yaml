@@ -1,0 +1,67 @@
+# EQAL Policy Pack — Accounts Payable (v0.3)
+# Structure follows the provisional specification [0025]–[0031].
+# Sections marked FROZEN are fixed by the runtime and must be identical across packs.
+pack: AP
+version: "0.3"
+currency: EUR
+human_touch_cost: 8.00
+
+# ---- FROZEN: intelligence classes (section 2) -------------------------------
+classes:
+  D: {name: deterministic,  cost: 0.000, latency_ms: 20}
+  S: {name: specialist,     cost: 0.010, latency_ms: 900}
+  L: {name: local model,    cost: 0.004, latency_ms: 600}
+  F: {name: frontier model, cost: 0.045, latency_ms: 3500}
+  M: {name: multi-model,    cost: 0.090, latency_ms: 7000}
+
+# ---- FROZEN: escalation rules (section 5) ------------------------------------
+autonomy_order: [NONE, RECOMMEND, ACT_NOTIFY, ACT]    # ordered, [0027]
+level_ceiling_values: [0, 1, 2, 3, H]                # H = human-terminated, [0027]
+routing_rule: conservative                           # [0031]: below threshold -> most restrictive candidate
+
+# ---- classification ladder ([0030]) ----------------------------------------
+classification:
+  ladder: [D, S, L]          # deterministic rules -> specialist classifier -> validated model -> human
+  threshold: 0.95
+  validation: {D: permitted, S: permitted, L: permitted, F: not_permitted}
+
+# ---- risk lens ([0042]) ----------------------------------------------------
+risk_lens:
+  signals: [payee_bank_changed, vendor_contact_anomaly, first_invoice, just_below_threshold]
+  weights: {payee_bank_changed: 0.45, vendor_contact_anomaly: 0.40, first_invoice: 0.20, just_below_threshold: 0.20}
+  threshold: 0.60
+  demote_to: RECOMMEND
+
+# ---- exception classes with budget vectors (sections 1, 3) -----------------
+exception_classes:
+  clean_match:
+    path: [D, L]
+    level_ceiling: 1
+    consequence: 25.00
+    budget: {max_cost: 0.010, evidence: 0.98, max_latency_ms: 5000, autonomy: ACT}
+    validation: {D: permitted, L: permitted, F: shadow_only}
+    human_rule: {role: ap_clerk, approvers: 1, when: budget_or_ceiling}
+    evidence_required: [PO, GR, invoice]
+
+  price_variance:
+    path: [L, F]
+    level_ceiling: 2
+    consequence: 400.00
+    budget: {max_cost: 0.050, evidence: 0.98, max_latency_ms: 30000, autonomy: ACT_NOTIFY}
+    autonomy_rule: {ACT_NOTIFY_if: {variance_lte: 250}, otherwise: RECOMMEND}
+    validation: {L: permitted, F: permitted}
+    human_rule: {role: ap_supervisor, approvers: 1, when: budget_or_ceiling}
+    evidence_required: [PO, price_list, last_3_invoices]
+    shadow_reference: L
+
+  bank_detail_change:
+    path: [S, F]
+    level_ceiling: H
+    consequence: 250000.00
+    budget: {max_cost: null, evidence: 0.99, max_latency_ms: 120000, autonomy: NONE}
+    validation: {S: permitted, F: permitted, L: not_permitted}
+    human_rule: {role: treasury, approvers: 2, when: always}
+    evidence_required: [callback_confirmation, portal_confirmation]
+
+# Restrictiveness order for conservative routing is derived, not configured:
+# lowest autonomy, then human-terminated ceiling, then strictest evidence ([0031]).

@@ -39,14 +39,14 @@ td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.
 <table class="stmt">
 <tr class="group"><td>Volume</td><td></td></tr>
 <tr><td>Invoices processed</td><td>2,000</td></tr>
-<tr class="sub"><td>Touchless invoice processing</td><td>90.0%</td></tr>
-<tr class="sub"><td>Escalated to a person</td><td>10.0%</td></tr>
+<tr class="sub"><td>Touchless invoice processing</td><td>90.1%</td></tr>
+<tr class="sub"><td>Escalated to a person</td><td>9.9%</td></tr>
 <tr class="sub"><td>Correct business outcome</td><td>99.95% (2000 judged)</td></tr>
 <tr class="group"><td>What deciding cost <span class="tag">observed</span></td><td></td></tr>
-<tr><td>AI intelligence spend</td><td>€12.90</td></tr>
+<tr><td>AI intelligence spend</td><td>€13.76</td></tr>
 <tr><td>People handling exceptions</td><td>€2,392.00</td></tr>
-<tr class="sum"><td>Total decision cost</td><td>€2,404.90</td></tr>
-<tr class="sub"><td>Per invoice</td><td>€1.202</td></tr>
+<tr class="sum"><td>Total decision cost</td><td>€2,405.76</td></tr>
+<tr class="sub"><td>Per invoice</td><td>€1.203</td></tr>
 <tr class="group"><td>Realized value <span class="tag">observed</span></td><td></td></tr>
 <tr><td>Bank-impersonation payments held (11 cases)</td><td class="gain">€19,032.15</td></tr>
 <tr class="total"><td>Loss avoided, confirmed</td><td class="gain">€19,032.15</td></tr>
@@ -54,14 +54,14 @@ td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.
 <tr><td>Capacity value vs. one human touch per invoice at €8.00</td><td>€13,608.00</td></tr>
 <tr class="sub"><td class="note">Counted only once the CFO confirms redeployment or headcount effect</td><td></td></tr>
 </table>
-<p class="note" style="margin-top:10px">Compute avoided against a send-everything-to-frontier baseline: n/a (no baseline in the service). Autonomy NONE on 100 cases regardless of confidence. 1 human overrides, all logged. 56 conservatively routed (€3.08, 3 impersonation attempts among them); 3 demoted by the risk lens; spend by maturity: pending €0.00, observed €12.90, mature €0.00.</p>
+<p class="note" style="margin-top:10px">Compute avoided against a send-everything-to-frontier baseline: n/a (no baseline in the service). Autonomy NONE on 101 cases regardless of confidence. 2 human overrides, all logged. 57 conservatively routed (€3.14, 3 impersonation attempts among them); 3 demoted by the risk lens; spend by maturity: pending €0.00, observed €13.76, mature €0.00.</p>
 
-<div class="finding" style="border-left-color:var(--gain)"><h2>No avoidable intelligence spend found <span class="tag">counterfactual, evidence-conditioned</span></h2><p>137 escalated cases; shadow accuracy 96.4% against a 98% threshold (observed outcomes), so the escalations were justified.</p></div>
+<div class="finding" style="border-left-color:var(--gain)"><h2>No avoidable intelligence spend found <span class="tag">counterfactual, evidence-conditioned</span></h2><p>155 escalated cases; shadow accuracy 95.5% against a 98% threshold (observed outcomes), so the escalations were justified.</p></div>
 
 <div class="compare"><h2>Same invoices, everything sent to a frontier model <span class="tag">counterfactual, simulated</span></h2>
 <table><tr><th></th><th>EQAL</th><th>All-frontier</th></tr>
-<tr><td>Total decision cost</td><td>€2,404.90</td><td>—</td></tr>
-<tr><td>Per invoice</td><td>€1.202</td><td>—</td></tr>
+<tr><td>Total decision cost</td><td>€2,405.76</td><td>—</td></tr>
+<tr><td>Per invoice</td><td>€1.203</td><td>—</td></tr>
 <tr><td>Correct business outcome</td><td>99.95% (2000 judged)</td><td>—</td></tr></table>
 <p class="note" style="margin:10px 0 0">Both runs use the same policy, evidence and human rules. Only the intelligence allocation differs.</p></div>
 </section>
@@ -69,14 +69,14 @@ td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.
 <section id="v-grid" role="tabpanel" hidden>
 <p class="lede ui">Read straight from <code>policy_ap.yaml</code>. Intelligence budget on the left, authority on the right; they are independent by design.</p>
 <div class="wrap"><table class="grid ui"><thead><tr><th>Class</th><th>Max cost</th><th>Confidence</th><th>Evidence required</th><th>Autonomy ceiling</th><th>Person</th><th>This run</th></tr></thead>
-<tbody><tr><td>clean match</td><td class=num>€0.010</td><td class=num>98%</td><td>PO, GR, invoice</td><td>ACT</td><td>ap_clerk ×1 (budget_or_ceiling)</td><td class=num>1592 · €0.000 avg · 100% touchless</td></tr><tr><td>price variance</td><td class=num>€0.050</td><td class=num>98%</td><td>PO, price_list, last_3_invoices</td><td>ACT_NOTIFY if rule, else RECOMMEND</td><td>ap_supervisor ×1 (budget_or_ceiling)</td><td class=num>308 · €0.024 avg · 69% touchless</td></tr><tr><td>bank detail change</td><td class=num>no limit</td><td class=num>99%</td><td>callback_confirmation, portal_confirmation</td><td>NONE</td><td>treasury ×2 (always)</td><td class=num>100 · €0.055 avg · 0% touchless</td></tr></tbody></table></div>
+<tbody><tr><td>clean match</td><td class=num>€0.010</td><td class=num>98%</td><td>PO, GR, invoice</td><td>ACT</td><td>ap_clerk ×1 (budget_or_ceiling)</td><td class=num>1593 · €0.000 avg · 100% touchless</td></tr><tr><td>price variance</td><td class=num>€0.050</td><td class=num>98%</td><td>PO, price_list, last_3_invoices</td><td>ACT_NOTIFY if rule, else RECOMMEND</td><td>ap_supervisor ×1 (budget_or_ceiling)</td><td class=num>306 · €0.027 avg · 69% touchless</td></tr><tr><td>bank detail change</td><td class=num>no limit</td><td class=num>99%</td><td>callback_confirmation, portal_confirmation</td><td>NONE</td><td>treasury ×2 (always)</td><td class=num>101 · €0.055 avg · 0% touchless</td></tr></tbody></table></div>
 <p class="note ui" style="margin-top:14px">Effective autonomy = min(policy ceiling, risk-lens ceiling): the lens can lower authority, never raise it. Validation is checked before the budget gate. Unlimited budget on bank-detail changes; autonomy NONE.</p>
 </section>
 
 <section id="v-ledger" role="tabpanel" hidden>
 <p class="lede ui">First six records that involved a person. One record per case; version 2 supersedes version 1 when the outcome is observed. Each carries the classification evidence, path, budget, risk score, effective autonomy, human rule and outcome.</p>
 <div class="wrap"><table class="ledger ui"><thead><tr><th>Invoice</th><th>Class</th><th>Path</th><th>Cost</th><th>Confidence</th><th>Action</th><th>Person</th><th>Outcome</th></tr></thead>
-<tbody><tr class=flag><td>5100400002</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>98.3%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>impersonation blocked · observed</td></tr><tr><td>5100400030</td><td>bank detail change <span class=leak>(conservative)</span></td><td>S → F</td><td class=num>€0.055</td><td class=num>93.7%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>posted ok · observed</td></tr><tr><td>5100400032</td><td>bank detail change <span class=leak>(conservative)</span></td><td>S → F</td><td class=num>€0.055</td><td class=num>94.8%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>posted ok · observed</td></tr><tr><td>5100400049</td><td>price variance</td><td>L → F</td><td class=num>€0.049</td><td class=num>99.7%</td><td>recommend (RECOMMEND)</td><td>ap_supervisor ×1</td><td>posted ok · observed</td></tr><tr><td>5100400062</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>96.0%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>change applied · observed</td></tr><tr><td>5100400106</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>97.0%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>change applied · observed</td></tr></tbody></table></div>
+<tbody><tr class=flag><td>5100400002</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>97.5%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>impersonation blocked · observed</td></tr><tr><td>5100400030</td><td>bank detail change <span class=leak>(conservative)</span></td><td>S → F</td><td class=num>€0.055</td><td class=num>88.7%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>posted ok · observed</td></tr><tr><td>5100400032</td><td>bank detail change <span class=leak>(conservative)</span></td><td>S → F</td><td class=num>€0.055</td><td class=num>97.0%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>posted ok · observed</td></tr><tr><td>5100400049</td><td>price variance</td><td>L → F</td><td class=num>€0.049</td><td class=num>100.0%</td><td>recommend (RECOMMEND)</td><td>ap_supervisor ×1</td><td>posted ok · observed</td></tr><tr><td>5100400062</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>94.0%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>change applied · observed</td></tr><tr><td>5100400106</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>93.4%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>change applied · observed</td></tr></tbody></table></div>
 </section>
 </main>
 <script>
