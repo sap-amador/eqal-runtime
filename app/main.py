@@ -18,6 +18,8 @@ PACK_NAME = os.getenv("EQAL_POLICY_PACK", "ap")
 POLICY = load_policy(PACK_NAME)
 RUNTIME = Runtime(POLICY, get_provider(os.getenv("EQAL_PROVIDER", "simulated")))
 MATURITY_DAYS = int(os.getenv("EQAL_MATURITY_DAYS", "30"))
+PACK_TITLES = {"AP": "Accounts payable", "SCM": "Supply chain execution"}
+UNITS = {"AP": "invoice", "SCM": "exception"}
 
 @app.on_event("startup")
 def _startup():
@@ -175,7 +177,13 @@ def _pnl(tid: str) -> dict:
                 conservative_caught=sum(1 for r in cons if r.get("outcome") and r["outcome"]["value"] == "impersonation_blocked"),
                 spend_by_maturity=by_mat, attribution=attribution, by_class=by_class,
                 observe_only=sum(1 for r in recs if r.get("observe_only")),
-                compute_ms=sum(r["latency_ms"] for r in recs), sample=[r for r in recs if r.get("human")][:6])
+                compute_ms=sum(r["latency_ms"] for r in recs), sample=[r for r in recs if r.get("human")][:6],
+                range=_range(tid))
+
+def _range(tid):
+    with Session() as s:
+        lo, hi = s.execute(select(func.min(Record.created_at), func.max(Record.created_at)).where(Record.tenant_id == tid)).one()
+    return f"{lo:%d %b %Y} to {hi:%d %b %Y}" if lo and hi else ""
 
 @app.get("/v1/pnl")
 def pnl(tid: str = Depends(tenant)): return _pnl(tid)
@@ -230,7 +238,9 @@ def render(s):
     rep = {"{{N}}": f"{s['n']:,}", "{{TOUCHLESS}}": f"{s['touchless']:.1%}", "{{ESCALATED}}": f"{1-s['touchless']:.1%}", "{{AI}}": eur(s["ai_cost"]), "{{HUMAN}}": eur(s["human_cost"]),
            "{{TOTAL}}": eur(s["total"]), "{{PER}}": f"€{s['per_case']:.3f}", "{{MANUAL_PER}}": f"€{s['manual_per_case']:.2f}", "{{EXPOSURE}}": eur(s["realised"]), "{{BLOCKED}}": str(s["held"]),
            "{{CAPACITY}}": eur(s["capacity_est"]), "{{CORRECT}}": correct, "{{OVERRIDES}}": str(s["overrides"]), "{{REFUSED}}": str(s["none_autonomy"]),
-           "{{COMPUTE}}": "n/a (no baseline in the service)", "{{BASE_TOTAL}}": "—", "{{BASE_PER}}": "—", "{{BASE_CORRECT}}": "—", "{{FINDING}}": finding, "{{GRID_ROWS}}": rows, "{{LEDGER_ROWS}}": lrows,
+           "{{BASELINE_BOX}}": "", "{{FINDING}}": finding, "{{PACK_TITLE}}": PACK_TITLES.get(POLICY["pack"], POLICY["pack"]),
+           "{{PROVIDER_LABEL}}": ("simulated provider" if type(RUNTIME.prov).__name__ == "SimulatedProvider" else "live run"),
+           "{{UNIT}}": UNITS.get(POLICY["pack"], "case"), "{{UNIT_CAP}}": UNITS.get(POLICY["pack"], "case").capitalize(), "{{RANGE}}": s.get("range", ""), "{{GRID_ROWS}}": rows, "{{LEDGER_ROWS}}": lrows,
            "{{POLICY_VERSION}}": str(POLICY["version"]),
            "{{CONSERVATIVE}}": f"{s['conservative']} conservatively routed (€{s['conservative_cost']:.2f}, {s['conservative_caught']} impersonation attempts among them); {s['lens_demoted']} demoted by the risk lens; spend by maturity: pending €{s['spend_by_maturity']['PENDING']:.2f}, observed €{s['spend_by_maturity']['OBSERVED']:.2f}, mature €{s['spend_by_maturity']['MATURE']:.2f}."}
     for k, v in rep.items(): tpl = tpl.replace(k, v)

@@ -32,7 +32,7 @@ table.grid td,table.ledger td{border-bottom:1px solid var(--rule);padding:9px 8p
 td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.flag td{background:#fbf1ef}
 .wrap{overflow-x:auto}p.lede{margin:0 0 18px;max-width:62ch}
 </style></head><body><main>
-<header><h1>Accounts payable<small>Intelligence P&amp;L — simulated run, policy pack v0.3</small></h1><div class="period">2,000 synthetic invoices</div></header>
+<header><h1>Accounts payable<small>Intelligence P&amp;L — simulated provider, policy pack v0.3</small></h1><div class="period">2,000 invoices · 12 Sep 2026 to 12 Sep 2026</div></header>
 <nav class="ui" role="tablist"><button role="tab" aria-selected="true" id="t-bill">The bill</button><button role="tab" aria-selected="false" id="t-grid">Policy grid</button><button role="tab" aria-selected="false" id="t-ledger">Autonomy ledger</button></nav>
 
 <section id="v-bill" role="tabpanel">
@@ -54,16 +54,11 @@ td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.
 <tr><td>Capacity value vs. one human touch per invoice at €8.00</td><td>€13,608.00</td></tr>
 <tr class="sub"><td class="note">Counted only once the CFO confirms redeployment or headcount effect</td><td></td></tr>
 </table>
-<p class="note" style="margin-top:10px">Compute avoided against a send-everything-to-frontier baseline: n/a (no baseline in the service). Autonomy NONE on 100 cases regardless of confidence. 1 human overrides, all logged. 56 conservatively routed (€3.08, 3 impersonation attempts among them); 3 demoted by the risk lens; spend by maturity: pending €0.00, observed €12.90, mature €0.00.</p>
+<p class="note" style="margin-top:10px">Autonomy NONE on 100 cases regardless of confidence. 1 human overrides, all logged. 56 conservatively routed (€3.08, 3 impersonation attempts among them); 3 demoted by the risk lens; spend by maturity: pending €0.00, observed €12.90, mature €0.00.</p>
 
 <div class="finding" style="border-left-color:var(--gain)"><h2>No avoidable intelligence spend found <span class="tag">counterfactual, evidence-conditioned</span></h2><p>137 escalated cases; shadow accuracy 96.4% against a 98% threshold (observed outcomes), so the escalations were justified.</p></div>
 
-<div class="compare"><h2>Same invoices, everything sent to a frontier model <span class="tag">counterfactual, simulated</span></h2>
-<table><tr><th></th><th>EQAL</th><th>All-frontier</th></tr>
-<tr><td>Total decision cost</td><td>€2,404.90</td><td>—</td></tr>
-<tr><td>Per invoice</td><td>€1.202</td><td>—</td></tr>
-<tr><td>Correct business outcome</td><td>99.95% (2000 judged)</td><td>—</td></tr></table>
-<p class="note" style="margin:10px 0 0">Both runs use the same policy, evidence and human rules. Only the intelligence allocation differs.</p></div>
+
 </section>
 
 <section id="v-grid" role="tabpanel" hidden>

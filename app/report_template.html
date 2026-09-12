@@ -32,38 +32,33 @@ table.grid td,table.ledger td{border-bottom:1px solid var(--rule);padding:9px 8p
 td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.flag td{background:#fbf1ef}
 .wrap{overflow-x:auto}p.lede{margin:0 0 18px;max-width:62ch}
 </style></head><body><main>
-<header><h1>Accounts payable<small>Intelligence P&amp;L — simulated run, policy pack v{{POLICY_VERSION}}</small></h1><div class="period">{{N}} synthetic invoices</div></header>
+<header><h1>{{PACK_TITLE}}<small>Intelligence P&amp;L — {{PROVIDER_LABEL}}, policy pack v{{POLICY_VERSION}}</small></h1><div class="period">{{N}} {{UNIT}}s · {{RANGE}}</div></header>
 <nav class="ui" role="tablist"><button role="tab" aria-selected="true" id="t-bill">The bill</button><button role="tab" aria-selected="false" id="t-grid">Policy grid</button><button role="tab" aria-selected="false" id="t-ledger">Autonomy ledger</button></nav>
 
 <section id="v-bill" role="tabpanel">
 <table class="stmt">
 <tr class="group"><td>Volume</td><td></td></tr>
-<tr><td>Invoices processed</td><td>{{N}}</td></tr>
-<tr class="sub"><td>Touchless invoice processing</td><td>{{TOUCHLESS}}</td></tr>
+<tr><td>{{UNIT_CAP}}s processed</td><td>{{N}}</td></tr>
+<tr class="sub"><td>Touchless {{UNIT}} processing</td><td>{{TOUCHLESS}}</td></tr>
 <tr class="sub"><td>Escalated to a person</td><td>{{ESCALATED}}</td></tr>
 <tr class="sub"><td>Correct business outcome</td><td>{{CORRECT}}</td></tr>
 <tr class="group"><td>What deciding cost <span class="tag">observed</span></td><td></td></tr>
 <tr><td>AI intelligence spend</td><td>{{AI}}</td></tr>
 <tr><td>People handling exceptions</td><td>{{HUMAN}}</td></tr>
 <tr class="sum"><td>Total decision cost</td><td>{{TOTAL}}</td></tr>
-<tr class="sub"><td>Per invoice</td><td>{{PER}}</td></tr>
+<tr class="sub"><td>Per {{UNIT}}</td><td>{{PER}}</td></tr>
 <tr class="group"><td>Realized value <span class="tag">observed</span></td><td></td></tr>
 <tr><td>Bank-impersonation payments held ({{BLOCKED}} cases)</td><td class="gain">{{EXPOSURE}}</td></tr>
 <tr class="total"><td>Loss avoided, confirmed</td><td class="gain">{{EXPOSURE}}</td></tr>
 <tr class="group"><td>Not counted above <span class="tag">estimated</span></td><td></td></tr>
-<tr><td>Capacity value vs. one human touch per invoice at {{MANUAL_PER}}</td><td>{{CAPACITY}}</td></tr>
+<tr><td>Capacity value vs. one human touch per {{UNIT}} at {{MANUAL_PER}}</td><td>{{CAPACITY}}</td></tr>
 <tr class="sub"><td class="note">Counted only once the CFO confirms redeployment or headcount effect</td><td></td></tr>
 </table>
-<p class="note" style="margin-top:10px">Compute avoided against a send-everything-to-frontier baseline: {{COMPUTE}}. Autonomy NONE on {{REFUSED}} cases regardless of confidence. {{OVERRIDES}} human overrides, all logged. {{CONSERVATIVE}}</p>
+<p class="note" style="margin-top:10px">Autonomy NONE on {{REFUSED}} cases regardless of confidence. {{OVERRIDES}} human overrides, all logged. {{CONSERVATIVE}}</p>
 
 {{FINDING}}
 
-<div class="compare"><h2>Same invoices, everything sent to a frontier model <span class="tag">counterfactual, simulated</span></h2>
-<table><tr><th></th><th>EQAL</th><th>All-frontier</th></tr>
-<tr><td>Total decision cost</td><td>{{TOTAL}}</td><td>{{BASE_TOTAL}}</td></tr>
-<tr><td>Per invoice</td><td>{{PER}}</td><td>{{BASE_PER}}</td></tr>
-<tr><td>Correct business outcome</td><td>{{CORRECT}}</td><td>{{BASE_CORRECT}}</td></tr></table>
-<p class="note" style="margin:10px 0 0">Both runs use the same policy, evidence and human rules. Only the intelligence allocation differs.</p></div>
+{{BASELINE_BOX}}
 </section>
 
 <section id="v-grid" role="tabpanel" hidden>
