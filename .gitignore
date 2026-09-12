@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.db
+ledger_*.jsonl
+summary_*.json
+report_ap.html
+.env
