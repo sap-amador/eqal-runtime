@@ -48,3 +48,24 @@ Expected on seed 11 (simulated provider): ~90% touchless, 99.9% correct, 0 unaut
 
 ## Production hardening (step 2.2)
 Once, as the DB owner: `REVOKE UPDATE, DELETE ON records FROM <app role>;`
+
+## v0.4.1 — Phase 3 preparation
+- `scripts/retro_ingest.py` — retrospective / observe-only ingestion of `invoices.csv` in the
+  historical-export format ([0076]). Booleans computed adapter-side; truth derived from the
+  owner's resolution codes; human cost from their rates and minutes per touch. Under
+  `EQAL_PROVIDER=simulated` it is a pipeline test; under `gateway` it is the read-out.
+- `GET /v1/graduation?min_mature=200&basis=MATURE` — autonomy-graduation proposals ([0063],
+  [0067]): a DRAFT pack diff with evidence attached when a class meets its own threshold on
+  enough matured outcomes. Proposed, never applied.
+- P&L for observe-only runs shows touchless *as it actually was* (owner data) and touchless
+  *the policy would have allowed* (counterfactual) side by side.
+- `gateway/` — LiteLLM service definition and alias config for step 3.1 (fill the EU endpoints
+  and keys; the runtime only ever sees eqal-L / eqal-F / eqal-M).
+- `outcome.human.human_cost_override` — lets an adapter pass the owner's actual cost per case.
+
+Retrospective run:
+    docker compose up --build
+    EQAL_URL=http://localhost:8000 EQAL_API_KEY=<key> python3 scripts/retro_ingest.py --csv invoices.csv --rate-clerk 48 --rate-supervisor 75 --rate-treasury 90 --minutes 6
+    curl -H "X-API-Key: <key>" -X POST "localhost:8000/v1/mature?days=0"     # historical outcomes are already mature
+    curl -H "X-API-Key: <key>" localhost:8000/v1/pnl/report > readout.html
+    curl -H "X-API-Key: <key>" "localhost:8000/v1/graduation?min_mature=200"

@@ -106,7 +106,7 @@ def outcome(case_id: str, body: OutcomeIn, tid: str = Depends(tenant)):
     if prev.get("shadow") and body.truth is not None and prev["shadow"].get("verdict") is not None:
         shadow_ok = prev["shadow"]["verdict"] == body.truth
     rec["outcome"] = dict(kind=body.kind, value=body.value, correct=body.correct, truth=body.truth, realised_effect=body.realised_effect or 0.0,
-                          human_touches=touches, human_cost=touches * POLICY["human_touch_cost"], override=(body.human or {}).get("override", False),
+                          human_touches=touches, human_cost=((body.human or {}).get("human_cost_override") if (body.human or {}).get("human_cost_override") is not None else touches * POLICY["human_touch_cost"]), override=(body.human or {}).get("override", False),
                           approver_ids=(body.human or {}).get("approver_ids", []), shadow_correct=shadow_ok, detail=body.detail or {},
                           observed_at=dt.datetime.utcnow().isoformat())
     rec["maturity"] = "OBSERVED"
@@ -143,6 +143,9 @@ def _pnl(tid: str) -> dict:
     obs = [r for r in recs if r.get("outcome")]
     ai = sum(r["cost"] for r in recs); hu = sum(r["outcome"]["human_cost"] for r in obs) + sum((r["human"] or {}).get("approvers", 0) * H for r in recs if not r.get("outcome") and r.get("human"))
     touchless = sum(1 for r in recs if not r.get("human")) / n
+    would_act = lambda r: r["reason"] == "threshold" and r["autonomy_policy"] in ("ACT", "ACT_NOTIFY") and AUT.index(r["lens_ceiling"]) >= AUT.index(r["autonomy_policy"])
+    touchless_policy = sum(1 for r in recs if would_act(r)) / n
+    touchless_actual = (sum(1 for r in obs if r["outcome"]["human_touches"] == 0) / len(obs)) if obs else None
     judged = [r for r in obs if r["outcome"]["correct"] is not None]
     correct = (sum(1 for r in judged if r["outcome"]["correct"]) / len(judged)) if judged else None
     by_mat = {m: sum(r["cost"] for r in recs if r["maturity"] == m) for m in ("PENDING", "OBSERVED", "MATURE")}
@@ -168,7 +171,7 @@ def _pnl(tid: str) -> dict:
                            autonomy=(b["autonomy"] if "autonomy_rule" not in pol else f"{b['autonomy']} if rule, else {pol['autonomy_rule']['otherwise']}"),
                            human=f"{pol['human_rule']['role']} ×{pol['human_rule']['approvers']} ({pol['human_rule']['when']})")
     cons = [r for r in recs if r["conservatively_routed"]]
-    return dict(n=n, ai_cost=ai, human_cost=hu, total=ai + hu, per_case=(ai + hu) / n, touchless=touchless, correct=correct, judged=len(judged),
+    return dict(n=n, ai_cost=ai, human_cost=hu, total=ai + hu, per_case=(ai + hu) / n, touchless=touchless, touchless_policy=touchless_policy, touchless_actual=touchless_actual, correct=correct, judged=len(judged),
                 realised=sum(r["outcome"]["realised_effect"] for r in obs), held=len(held), capacity_est=n * H - hu, manual_per_case=H,
                 overrides=sum(1 for r in obs if r["outcome"]["override"]), none_autonomy=sum(1 for r in recs if r["autonomy_effective"] == "NONE"),
                 unauthorised=sum(1 for r in recs if r["autonomy_effective"] == "NONE" and r["action"].startswith("act")),
@@ -212,6 +215,28 @@ def governance(tid: str = Depends(tenant)):
                 autonomy_evidence_coverage=cov, spend_by_maturity={m: sum(r["cost"] for r in recs if r["maturity"] == m) for m in ("PENDING", "OBSERVED", "MATURE")},
                 unproven_spend=sum(a.get("unproven", 0) for a in _pnl(tid)["attribution"].values()))
 
+@app.get("/v1/graduation")
+def graduation(tid: str = Depends(tenant), min_mature: int = Query(200), basis: str = Query("MATURE", pattern="^(MATURE|OBSERVED)$")):
+    """Autonomy-graduation proposals. For each class whose policy autonomy is below ACT, count the
+    outcomes (matured by default) where the runtime reached the evidence threshold and its verdict
+    was right. If the observed accuracy meets the class threshold on at least `min_mature` cases,
+    propose one step up, as a DRAFT pack diff with the evidence attached. Nothing is applied here:
+    promotion is a human approving a new pack version ([0063]); demotion is automatic ([0067])."""
+    recs = _latest(tid); ec = POLICY["exception_classes"]; out = []
+    for k, pol in ec.items():
+        cur = pol["budget"]["autonomy"]
+        if pol["level_ceiling"] == "H" or cur == "ACT": out.append(dict(exception_class=k, current=cur, proposed=None, status="not applicable: ceiling H or already ACT")); continue
+        rs = [r for r in recs if r["exception_class"] == k and r.get("outcome") and r["outcome"]["correct"] is not None
+              and (r["maturity"] == "MATURE" if basis == "MATURE" else r["maturity"] in ("MATURE", "OBSERVED"))
+              and r["reason"] == "threshold"]
+        n = len(rs); acc = (sum(1 for r in rs if r["outcome"]["correct"]) / n) if n else 0.0; theta = pol["budget"]["evidence"]
+        nxt = AUT[AUT.index(cur) + 1]
+        ok = n >= min_mature and acc >= theta
+        out.append(dict(exception_class=k, current=cur, proposed=(nxt if ok else None), basis=basis, evidence=dict(n=n, accuracy=round(acc, 4), threshold=theta, min_required=min_mature),
+                        draft=({"exception_classes": {k: {"budget": {"autonomy": nxt}}}, "version_note": f"DRAFT: {k} {cur}->{nxt} on {n} {basis.lower()} outcomes at {acc:.2%} >= {theta:.0%}"} if ok else None),
+                        status=("PROPOSED - requires human approval of a new pack version" if ok else "insufficient evidence")))
+    return dict(pack=f"{POLICY['pack']}/{POLICY['version']}", proposals=out)
+
 @app.get("/v1/pnl/report", response_class=HTMLResponse)
 def report(tid: str = Depends(tenant)): return render(_pnl(tid))
 
@@ -235,7 +260,14 @@ def render(s):
     else:
         finding = f'<div class="finding" style="border-left-color:var(--gain)"><h2>No avoidable intelligence spend found <span class="tag">counterfactual, evidence-conditioned</span></h2><p>{att["n"] if att else 0} escalated cases; shadow accuracy {att["shadow_accuracy"] if att else 0:.1%} against a {att["threshold"] if att else 0:.0%} threshold ({att["basis"].lower() if att else "no"} outcomes), so the escalations were justified.</p></div>'
     correct = f"{s['correct']:.2%} ({s['judged']} judged)" if s["correct"] is not None else "awaiting outcomes"
-    rep = {"{{N}}": f"{s['n']:,}", "{{TOUCHLESS}}": f"{s['touchless']:.1%}", "{{ESCALATED}}": f"{1-s['touchless']:.1%}", "{{AI}}": eur(s["ai_cost"]), "{{HUMAN}}": eur(s["human_cost"]),
+    if s["observe_only"] > 0:
+        trows = (f'<tr class="sub"><td>Touchless as it actually was (owner data)</td><td>{s["touchless_actual"]:.1%}</td></tr>'
+                 f'<tr class="sub"><td>Touchless the policy would have allowed <span class="tag">counterfactual</span></td><td>{s["touchless_policy"]:.1%}</td></tr>'
+                 f'<tr class="sub"><td>Observe-only: nothing acted, every record marked</td><td>{s["observe_only"]:,}</td></tr>')
+    else:
+        trows = (f'<tr class="sub"><td>Touchless {UNITS.get(POLICY["pack"], "case")} processing</td><td>{s["touchless"]:.1%}</td></tr>'
+                 f'<tr class="sub"><td>Escalated to a person</td><td>{1-s["touchless"]:.1%}</td></tr>')
+    rep = {"{{N}}": f"{s['n']:,}", "{{TOUCHLESS_ROWS}}": trows, "{{AI}}": eur(s["ai_cost"]), "{{HUMAN}}": eur(s["human_cost"]),
            "{{TOTAL}}": eur(s["total"]), "{{PER}}": f"€{s['per_case']:.3f}", "{{MANUAL_PER}}": f"€{s['manual_per_case']:.2f}", "{{EXPOSURE}}": eur(s["realised"]), "{{BLOCKED}}": str(s["held"]),
            "{{CAPACITY}}": eur(s["capacity_est"]), "{{CORRECT}}": correct, "{{OVERRIDES}}": str(s["overrides"]), "{{REFUSED}}": str(s["none_autonomy"]),
            "{{BASELINE_BOX}}": "", "{{FINDING}}": finding, "{{PACK_TITLE}}": PACK_TITLES.get(POLICY["pack"], POLICY["pack"]),

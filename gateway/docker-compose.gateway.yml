@@ -1,0 +1,22 @@
+# docker compose -f docker-compose.yml -f gateway/docker-compose.gateway.yml up --build
+services:
+  gateway:
+    image: ghcr.io/berriai/litellm:main-latest
+    command: ["--config", "/config/litellm.yaml", "--port", "4000"]
+    volumes: [ "./gateway/litellm.yaml:/config/litellm.yaml:ro" ]
+    environment:
+      EQAL_GATEWAY_KEY: ${EQAL_GATEWAY_KEY}
+      EQAL_L_KEY: ${EQAL_L_KEY}
+      EQAL_F_KEY: ${EQAL_F_KEY}
+      EQAL_M_KEY: ${EQAL_M_KEY}
+    ports: [ "4000:4000" ]
+  api:
+    environment:
+      EQAL_PROVIDER: gateway
+      EQAL_GATEWAY_URL: http://gateway:4000
+      EQAL_GATEWAY_KEY: ${EQAL_GATEWAY_KEY}
+      EQAL_MODEL_L: eqal-L
+      EQAL_MODEL_F: eqal-F
+      EQAL_MODEL_M: eqal-M
+      EQAL_PROVIDER_REGION: eu
+    depends_on: { gateway: { condition: service_started } }

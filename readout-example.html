@@ -32,45 +32,45 @@ table.grid td,table.ledger td{border-bottom:1px solid var(--rule);padding:9px 8p
 td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.flag td{background:#fbf1ef}
 .wrap{overflow-x:auto}p.lede{margin:0 0 18px;max-width:62ch}
 </style></head><body><main>
-<header><h1>{{PACK_TITLE}}<small>Intelligence P&amp;L — {{PROVIDER_LABEL}}, policy pack v{{POLICY_VERSION}}</small></h1><div class="period">{{N}} {{UNIT}}s · {{RANGE}}</div></header>
+<header><h1>Accounts payable<small>Intelligence P&amp;L — simulated provider, policy pack v0.3</small></h1><div class="period">1,500 invoices · 12 Sep 2026 to 12 Sep 2026</div></header>
 <nav class="ui" role="tablist"><button role="tab" aria-selected="true" id="t-bill">The bill</button><button role="tab" aria-selected="false" id="t-grid">Policy grid</button><button role="tab" aria-selected="false" id="t-ledger">Autonomy ledger</button></nav>
 
 <section id="v-bill" role="tabpanel">
 <table class="stmt">
 <tr class="group"><td>Volume</td><td></td></tr>
-<tr><td>{{UNIT_CAP}}s processed</td><td>{{N}}</td></tr>
-{{TOUCHLESS_ROWS}}
-<tr class="sub"><td>Correct business outcome</td><td>{{CORRECT}}</td></tr>
+<tr><td>Invoices processed</td><td>1,500</td></tr>
+<tr class="sub"><td>Touchless as it actually was (owner data)</td><td>77.9%</td></tr><tr class="sub"><td>Touchless the policy would have allowed <span class="tag">counterfactual</span></td><td>91.7%</td></tr><tr class="sub"><td>Observe-only: nothing acted, every record marked</td><td>1,500</td></tr>
+<tr class="sub"><td>Correct business outcome</td><td>99.73% (1500 judged)</td></tr>
 <tr class="group"><td>What deciding cost <span class="tag">observed</span></td><td></td></tr>
-<tr><td>AI intelligence spend</td><td>{{AI}}</td></tr>
-<tr><td>People handling exceptions</td><td>{{HUMAN}}</td></tr>
-<tr class="sum"><td>Total decision cost</td><td>{{TOTAL}}</td></tr>
-<tr class="sub"><td>Per {{UNIT}}</td><td>{{PER}}</td></tr>
+<tr><td>AI intelligence spend</td><td>€9.49</td></tr>
+<tr><td>People handling exceptions</td><td>€2,108.40</td></tr>
+<tr class="sum"><td>Total decision cost</td><td>€2,117.89</td></tr>
+<tr class="sub"><td>Per invoice</td><td>€1.412</td></tr>
 <tr class="group"><td>Realized value <span class="tag">observed</span></td><td></td></tr>
-<tr><td>Bank-impersonation payments held ({{BLOCKED}} cases)</td><td class="gain">{{EXPOSURE}}</td></tr>
-<tr class="total"><td>Loss avoided, confirmed</td><td class="gain">{{EXPOSURE}}</td></tr>
+<tr><td>Bank-impersonation payments held (10 cases)</td><td class="gain">€35,900.18</td></tr>
+<tr class="total"><td>Loss avoided, confirmed</td><td class="gain">€35,900.18</td></tr>
 <tr class="group"><td>Not counted above <span class="tag">estimated</span></td><td></td></tr>
-<tr><td>Capacity value vs. one human touch per {{UNIT}} at {{MANUAL_PER}}</td><td>{{CAPACITY}}</td></tr>
+<tr><td>Capacity value vs. one human touch per invoice at €8.00</td><td>€9,891.60</td></tr>
 <tr class="sub"><td class="note">Counted only once the CFO confirms redeployment or headcount effect</td><td></td></tr>
 </table>
-<p class="note" style="margin-top:10px">Autonomy NONE on {{REFUSED}} cases regardless of confidence. {{OVERRIDES}} human overrides, all logged. {{CONSERVATIVE}}</p>
+<p class="note" style="margin-top:10px">Autonomy NONE on 1500 cases regardless of confidence. 4 human overrides, all logged. 0 conservatively routed (€0.00, 0 impersonation attempts among them); 0 demoted by the risk lens; spend by maturity: pending €0.00, observed €0.00, mature €9.49.</p>
 
-{{FINDING}}
+<div class="finding" style="border-left-color:var(--gain)"><h2>No avoidable intelligence spend found <span class="tag">counterfactual, evidence-conditioned</span></h2><p>137 escalated cases; shadow accuracy 92.7% against a 98% threshold (mature outcomes), so the escalations were justified.</p></div>
 
-{{BASELINE_BOX}}
+
 </section>
 
 <section id="v-grid" role="tabpanel" hidden>
 <p class="lede ui">Read straight from <code>policy_ap.yaml</code>. Intelligence budget on the left, authority on the right; they are independent by design.</p>
 <div class="wrap"><table class="grid ui"><thead><tr><th>Class</th><th>Max cost</th><th>Confidence</th><th>Evidence required</th><th>Autonomy ceiling</th><th>Person</th><th>This run</th></tr></thead>
-<tbody>{{GRID_ROWS}}</tbody></table></div>
+<tbody><tr><td>clean match</td><td class=num>€0.010</td><td class=num>98%</td><td>PO, GR, invoice</td><td>ACT</td><td>ap_clerk ×1 (budget_or_ceiling)</td><td class=num>1168 · €0.000 avg · 0% touchless</td></tr><tr><td>price variance</td><td class=num>€0.050</td><td class=num>98%</td><td>PO, price_list, last_3_invoices</td><td>ACT_NOTIFY if rule, else RECOMMEND</td><td>ap_supervisor ×1 (budget_or_ceiling)</td><td class=num>293 · €0.025 avg · 0% touchless</td></tr><tr><td>bank detail change</td><td class=num>no limit</td><td class=num>99%</td><td>callback_confirmation, portal_confirmation</td><td>NONE</td><td>treasury ×2 (always)</td><td class=num>39 · €0.055 avg · 0% touchless</td></tr></tbody></table></div>
 <p class="note ui" style="margin-top:14px">Effective autonomy = min(policy ceiling, risk-lens ceiling): the lens can lower authority, never raise it. Validation is checked before the budget gate. Unlimited budget on bank-detail changes; autonomy NONE.</p>
 </section>
 
 <section id="v-ledger" role="tabpanel" hidden>
 <p class="lede ui">First six records that involved a person. One record per case; version 2 supersedes version 1 when the outcome is observed. Each carries the classification evidence, path, budget, risk score, effective autonomy, human rule and outcome.</p>
 <div class="wrap"><table class="ledger ui"><thead><tr><th>Invoice</th><th>Class</th><th>Path</th><th>Cost</th><th>Confidence</th><th>Action</th><th>Person</th><th>Outcome</th></tr></thead>
-<tbody>{{LEDGER_ROWS}}</tbody></table></div>
+<tbody><tr><td>H-394f63789746e45b</td><td>clean match</td><td>D</td><td class=num>€0.000</td><td class=num>100.0%</td><td>enqueue (NONE)</td><td>ap_clerk ×1</td><td>posted ok · mature</td></tr><tr><td>H-fa68b653d2272c8b</td><td>price variance</td><td>L</td><td class=num>€0.004</td><td class=num>100.0%</td><td>enqueue (NONE)</td><td>ap_supervisor ×1</td><td>posted ok · mature</td></tr><tr><td>H-7260ce5be5ef4b45</td><td>clean match</td><td>D</td><td class=num>€0.000</td><td class=num>100.0%</td><td>enqueue (NONE)</td><td>ap_clerk ×1</td><td>posted ok · mature</td></tr><tr><td>H-0b2e6f79e0124470</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>100.0%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>posted ok · mature</td></tr><tr><td>H-fa486d33177e1888</td><td>clean match</td><td>D</td><td class=num>€0.000</td><td class=num>99.4%</td><td>enqueue (NONE)</td><td>ap_clerk ×1</td><td>posted ok · mature</td></tr><tr><td>H-f7e48aa6a8b04dc4</td><td>clean match</td><td>D</td><td class=num>€0.000</td><td class=num>99.8%</td><td>enqueue (NONE)</td><td>ap_clerk ×1</td><td>posted ok · mature</td></tr></tbody></table></div>
 </section>
 </main>
 <script>

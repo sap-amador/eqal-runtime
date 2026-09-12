@@ -1,0 +1,24 @@
+# LiteLLM gateway for step 3.1. One alias per intelligence class; EU endpoints only.
+# The runtime never sees a vendor name: EQAL_MODEL_L=eqal-L, EQAL_MODEL_F=eqal-F, EQAL_MODEL_M=eqal-M.
+model_list:
+  - model_name: eqal-L
+    litellm_params:
+      model: openai/<small-model-id>          # e.g. a small instruction model on an EU endpoint
+      api_base: https://<eu-endpoint>/v1
+      api_key: os.environ/EQAL_L_KEY
+  - model_name: eqal-F
+    litellm_params:
+      model: openai/<frontier-model-id>
+      api_base: https://<eu-endpoint>/v1
+      api_key: os.environ/EQAL_F_KEY
+  - model_name: eqal-M
+    litellm_params:
+      model: openai/<frontier-model-id-2>     # second, independent provider for multi-model deliberation
+      api_base: https://<eu-endpoint-2>/v1
+      api_key: os.environ/EQAL_M_KEY
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+general_settings:
+  master_key: os.environ/EQAL_GATEWAY_KEY     # what the runtime presents as EQAL_GATEWAY_KEY
+  # per-tenant allowlists: create one virtual key per tenant restricted to the aliases above
