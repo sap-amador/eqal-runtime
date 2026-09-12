@@ -30,8 +30,12 @@ class APDeterministic:
         return dict(variance=round(variance, 2), extra_lines=len(extra), qty_issue=qty_issue, within_tolerance=within, po_total=round(po_total, 2))
 
     def duplicate(self, inv):
-        key = hashlib.sha256(json.dumps([inv["vendor_ref"], inv["amount"], sorted(l["item"] for l in inv["lines"])]).encode()).hexdigest()
-        dup = key in self.seen; self.seen[key] = inv["invoice_ref"]; return dup
+        """A duplicate is the same vendor invoice number, or the same vendor + amount + invoice date.
+        Recurring identical orders on different dates are legitimate and must not trip this."""
+        k1 = hashlib.sha256(json.dumps([inv["vendor_ref"], inv["invoice_ref"]]).encode()).hexdigest()
+        k2 = hashlib.sha256(json.dumps([inv["vendor_ref"], inv["amount"], inv["date"]]).encode()).hexdigest()
+        dup = k1 in self.seen or k2 in self.seen
+        self.seen[k1] = inv["invoice_ref"]; self.seen[k2] = inv["invoice_ref"]; return dup
 
     def build(self, case):
         docs = case["docs"]; inv = docs["invoice"]; m = self.match(docs)
@@ -44,6 +48,7 @@ class APDeterministic:
         # D verdict: rules alone approve only a clean match; anything else is not decidable by rules
         rule_pass = (cands == ["clean_match"]) and not dup
         signals = dict(payee_bank_changed=bank_changed, vendor_contact_anomaly=False, first_invoice=False, just_below_threshold=False,
+                       adapter_version="ap-deterministic-v0.5.1",
                        po_match_exact=m["within_tolerance"], master_data_complete=True, duplicate_suspected=dup,
                        rule_candidates=cands, rule_class_confidence=cconf, rule_pass=rule_pass, rule_confidence=0.998 if rule_pass else 0.5,
                        verified=False, verify_confidence=0.0, adapter_id="ap-deterministic-v0.5")

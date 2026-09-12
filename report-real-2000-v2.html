@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EQAL — Intelligence P&L, Accounts payable (simulation)</title>
+<style>
+:root{--ink:#1c2430;--muted:#5f6b78;--rule:#dfe3e8;--strong:#1c2430;--gain:#1f6f4a;--leak:#a63d2f;--wash:#f3f5f7;--focus:#2b5db8}
+*{box-sizing:border-box}body{margin:0;background:#fff;color:var(--ink);font:16px/1.5 Georgia,"Times New Roman",serif}
+.ui{font:14px/1.4 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+main{max-width:780px;margin:0 auto;padding:40px 24px 80px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:28px}
+h1{font-size:30px;line-height:1.15;font-weight:normal;margin:0}h1 small{display:block;font-size:16px;color:var(--muted);margin-top:4px}
+.period{color:var(--muted)}
+nav{display:flex;gap:2px;border-bottom:1px solid var(--rule);margin-bottom:24px}
+nav button{background:none;border:0;border-bottom:2px solid transparent;padding:10px 14px;color:var(--muted);cursor:pointer;font-size:15px}
+nav button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--ink)}nav button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+section[hidden]{display:none}
+.stmt{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}.stmt td{padding:9px 0;border-bottom:1px solid var(--rule);vertical-align:baseline}
+.stmt td:last-child{text-align:right;white-space:nowrap;width:170px}
+.stmt tr.group td{padding-top:22px;border-bottom:1px solid var(--strong);color:var(--muted);font-size:15px}
+.stmt tr.sub td{padding-left:20px}.stmt tr.sum td{font-weight:bold}
+.stmt tr.total td{border-top:1px solid var(--strong);border-bottom:3px double var(--strong);font-size:22px;padding:14px 0}
+.gain{color:var(--gain)}.leak{color:var(--leak)}.note{font-size:14px;color:var(--muted)}
+.tag{font-size:12px;color:var(--muted);border:1px solid var(--rule);padding:0 6px;margin-left:8px;border-radius:2px;vertical-align:middle;font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+.finding{margin-top:32px;padding:20px 22px;background:var(--wash);border-left:4px solid var(--leak)}
+.finding h2{font-size:18px;font-weight:normal;margin:0 0 6px}.finding p{margin:0 0 12px}
+.finding button{background:var(--ink);color:#fff;border:0;padding:9px 14px;cursor:pointer;font-size:14px}
+.compare{margin-top:32px;padding:20px 22px;border:1px solid var(--strong)}
+.compare h2{font-size:18px;font-weight:normal;margin:0 0 10px}.compare table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.compare td{padding:6px 0;border-bottom:1px solid var(--rule)}.compare td+td{text-align:right;width:150px}.compare th{text-align:right;font-weight:normal;color:var(--muted);padding-bottom:6px}.compare th:first-child{text-align:left}
+table.grid,table.ledger{width:100%;border-collapse:collapse;font-size:13.5px}
+table.grid th,table.ledger th{text-align:left;font-weight:normal;color:var(--muted);border-bottom:1px solid var(--strong);padding:8px 8px 8px 0;vertical-align:bottom}
+table.grid td,table.ledger td{border-bottom:1px solid var(--rule);padding:9px 8px 9px 0;vertical-align:top}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.flag td{background:#fbf1ef}
+.wrap{overflow-x:auto}p.lede{margin:0 0 18px;max-width:62ch}
+</style></head><body><main>
+<header><h1>Accounts payable<small>Intelligence P&amp;L — live run, policy pack v0.3</small></h1><div class="period">2,000 invoices · 12 Sep 2026 to 12 Sep 2026</div></header>
+<nav class="ui" role="tablist"><button role="tab" aria-selected="true" id="t-bill">The bill</button><button role="tab" aria-selected="false" id="t-grid">Policy grid</button><button role="tab" aria-selected="false" id="t-ledger">Autonomy ledger</button></nav>
+
+<section id="v-bill" role="tabpanel">
+<table class="stmt">
+<tr class="group"><td>Volume</td><td></td></tr>
+<tr><td>Invoices processed</td><td>2,000</td></tr>
+<tr class="sub"><td>Touchless invoice processing</td><td>94.5%</td></tr><tr class="sub"><td>Escalated to a person</td><td>5.5%</td></tr>
+<tr class="sub"><td>Correct business outcome</td><td>99.30% (2000 judged)</td></tr>
+<tr class="group"><td>What deciding cost <span class="tag">observed</span></td><td></td></tr>
+<tr><td>AI intelligence spend</td><td>€5.06</td></tr>
+<tr><td>People handling exceptions</td><td>€1,496.00</td></tr>
+<tr class="sum"><td>Total decision cost</td><td>€1,501.07</td></tr>
+<tr class="sub"><td>Per invoice</td><td>€0.751</td></tr>
+<tr class="group"><td>Realized value <span class="tag">observed</span></td><td></td></tr>
+<tr><td>Bank-impersonation payments held (14 cases)</td><td class="gain">€185,526.05</td></tr>
+<tr class="total"><td>Loss avoided, confirmed</td><td class="gain">€185,526.05</td></tr>
+<tr class="group"><td>Not counted above <span class="tag">estimated</span></td><td></td></tr>
+<tr><td>Capacity value vs. one human touch per invoice at €8.00</td><td>€14,504.00</td></tr>
+<tr class="sub"><td class="note">Counted only once the CFO confirms redeployment or headcount effect</td><td></td></tr>
+</table>
+<p class="note" style="margin-top:10px">Autonomy NONE on 76 cases regardless of confidence. 22 human overrides, all logged. 0 conservatively routed (€0.00, 0 impersonation attempts among them); 0 demoted by the risk lens; spend by maturity: pending €0.00, observed €5.06, mature €0.00.</p>
+
+<div class="finding" style="border-left-color:#C77700"><h2>€0.04 unproven <span class="tag">counterfactual, not yet matured</span></h2><p>1 escalated cases; shadow accuracy 100.0% is above the 98% threshold on observed outcomes, but none has matured. Neither waste nor justified until it does.</p></div>
+
+
+</section>
+
+<section id="v-grid" role="tabpanel" hidden>
+<p class="lede ui">Read straight from <code>policy_ap.yaml</code>. Intelligence budget on the left, authority on the right; they are independent by design.</p>
+<div class="wrap"><table class="grid ui"><thead><tr><th>Class</th><th>Max cost</th><th>Confidence</th><th>Evidence required</th><th>Autonomy ceiling</th><th>Person</th><th>This run</th></tr></thead>
+<tbody><tr><td>clean match</td><td class=num>€0.010</td><td class=num>98%</td><td>PO, GR, invoice</td><td>ACT</td><td>ap_clerk ×1 (budget_or_ceiling)</td><td class=num>1717 · €0.000 avg · 100% touchless</td></tr><tr><td>price variance</td><td class=num>€0.050</td><td class=num>98%</td><td>PO, price_list, last_3_invoices</td><td>ACT_NOTIFY if rule, else RECOMMEND</td><td>ap_supervisor ×1 (budget_or_ceiling)</td><td class=num>207 · €0.004 avg · 84% touchless</td></tr><tr><td>bank detail change</td><td class=num>no limit</td><td class=num>99%</td><td>callback_confirmation, portal_confirmation</td><td>NONE</td><td>treasury ×2 (always)</td><td class=num>76 · €0.055 avg · 0% touchless</td></tr></tbody></table></div>
+<p class="note ui" style="margin-top:14px">Effective autonomy = min(policy ceiling, risk-lens ceiling): the lens can lower authority, never raise it. Validation is checked before the budget gate. Unlimited budget on bank-detail changes; autonomy NONE.</p>
+</section>
+
+<section id="v-ledger" role="tabpanel" hidden>
+<p class="lede ui">First six records that involved a person. One record per case; version 2 supersedes version 1 when the outcome is observed. Each carries the classification evidence, path, budget, risk score, effective autonomy, human rule and outcome.</p>
+<div class="wrap"><table class="ledger ui"><thead><tr><th>Invoice</th><th>Class</th><th>Path</th><th>Cost</th><th>Confidence</th><th>Action</th><th>Person</th><th>Outcome</th></tr></thead>
+<tbody><tr><td>H-6d1b934399</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>95.0%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>posted ok · observed</td></tr><tr class=flag><td>H-39a5f50576</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>85.0%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>impersonation blocked · observed</td></tr><tr><td>H-ce5fce1bea</td><td>price variance</td><td>L</td><td class=num>€0.004</td><td class=num>98.0%</td><td>recommend (RECOMMEND)</td><td>ap_supervisor ×1</td><td>rejected ok · observed</td></tr><tr><td>H-a40b6626e8</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>85.0%</td><td>enqueue (NONE)</td><td>treasury ×2 (override)</td><td>posted ok · observed</td></tr><tr><td>H-33fe61903c</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>95.0%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>posted ok · observed</td></tr><tr><td>H-6a37261af0</td><td>bank detail change</td><td>S → F</td><td class=num>€0.055</td><td class=num>85.0%</td><td>enqueue (NONE)</td><td>treasury ×2</td><td>posted ok · observed</td></tr></tbody></table></div>
+</section>
+</main>
+<script>
+function showTab(n){for(const k of['bill','grid','ledger']){document.getElementById('v-'+k).hidden=(k!==n);document.getElementById('t-'+k).setAttribute('aria-selected',k===n?'true':'false');}}
+document.querySelectorAll('nav [role=tab]').forEach(b=>b.addEventListener('click',()=>showTab(b.id.slice(2))));
+</script></body></html>
