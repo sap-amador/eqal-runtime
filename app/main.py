@@ -23,6 +23,23 @@ PACK_NAME = os.getenv("EQAL_POLICY_PACK", "ap")
 POLICY = load_policy(PACK_NAME)
 RUNTIME = Runtime(POLICY, get_provider(os.getenv("EQAL_PROVIDER", "simulated")))
 MATURITY_DAYS = int(os.getenv("EQAL_MATURITY_DAYS", "30"))
+MAX_MODEL_CALLS_PER_DAY = int(os.getenv("EQAL_MAX_MODEL_CALLS_PER_DAY", "3000"))     # per tenant; protects the provider spend cap
+MAX_UPLOAD_ROWS = int(os.getenv("EQAL_MAX_UPLOAD_ROWS", "3000"))
+MAX_REQ_PER_MIN = int(os.getenv("EQAL_MAX_REQ_PER_MIN", "600"))
+DEMO_TENANT = os.getenv("EQAL_DEMO_TENANT", "")                                        # reports readable with ?key= for this tenant only
+import collections, threading
+_rl = collections.defaultdict(list); _rl_lock = threading.Lock()
+def _rate(tid: str):
+    now = dt.datetime.utcnow().timestamp()
+    with _rl_lock:
+        q = _rl[tid]; q[:] = [t for t in q if now - t < 60]
+        if len(q) >= MAX_REQ_PER_MIN: raise HTTPException(429, "rate limit: slow down")
+        q.append(now)
+def _model_calls_today(tid: str) -> int:
+    since = dt.datetime.utcnow() - dt.timedelta(days=1)
+    with Session() as s:
+        rows = s.execute(select(Record.payload).where(Record.tenant_id == tid, Record.version == 1, Record.created_at >= since)).scalars().all()
+    return sum(1 for p in rows for st_ in json.loads(p)["path"] if st_["cls"] in ("L", "F", "M"))
 PACK_TITLES = {"AP": "Accounts payable", "SCM": "Supply chain execution"}
 UNITS = {"AP": "invoice", "SCM": "exception"}
 
@@ -35,11 +52,14 @@ def _startup():
             if not s.get(Tenant, tid): s.add(Tenant(tenant_id=tid, name=tid, api_key_hash=_hash(key))); s.commit()
 
 def _hash(k): return hashlib.sha256(k.encode()).hexdigest()
-def tenant(x_api_key: str = Header(...)) -> str:
+def tenant(x_api_key: str | None = Header(None), key: str | None = Query(None)) -> str:
+    if x_api_key is None and key is not None: x_api_key = key
+    if x_api_key is None: raise HTTPException(401, "missing API key")
     h = _hash(x_api_key)
     with Session() as s:
         for t in s.execute(select(Tenant)).scalars():
-            if hmac.compare_digest(t.api_key_hash, h): return t.tenant_id
+            if hmac.compare_digest(t.api_key_hash, h):
+                _rate(t.tenant_id); return t.tenant_id
     raise HTTPException(401, "invalid API key")
 
 # ---------------------------------------------------------------- models
@@ -86,7 +106,7 @@ def health(): return {"ok": True}
 @app.get("/health/full")
 def health_full():
     with engine.connect() as c: c.execute(text("select 1"))
-    return {"ok": True, "db": True, "policy": f"{POLICY['pack']} v{POLICY['version']} ({POLICY['lifecycle']})", "provider": type(RUNTIME.prov).__name__}
+    return {"ok": True, "db": True, "policy": f"{POLICY['pack']} v{POLICY['version']} ({POLICY['lifecycle']})", "provider": type(RUNTIME.prov).__name__, "limits": dict(model_calls_per_day=MAX_MODEL_CALLS_PER_DAY, upload_rows=MAX_UPLOAD_ROWS, req_per_min=MAX_REQ_PER_MIN), "demo_tenant": bool(DEMO_TENANT)}
 
 @app.get("/v1/policy")
 def policy(tid: str = Depends(tenant)): return POLICY
@@ -94,6 +114,7 @@ def policy(tid: str = Depends(tenant)): return POLICY
 @app.post("/v1/decide")
 def decide(body: DecideIn, tid: str = Depends(tenant)):
     if _latest(tid, body.case_id): raise HTTPException(409, "case already decided; append an outcome instead")
+    if _model_calls_today(tid) >= MAX_MODEL_CALLS_PER_DAY: raise HTTPException(429, f"daily model-call budget reached ({MAX_MODEL_CALLS_PER_DAY}); rules-only decisions continue tomorrow")
     case = Case(body.case_id, body.input_refs, body.signals, body.flags, body.consequence, body.harm_class, body.reversible, body.evidence_hashes)
     rec = seal(RUNTIME.decide(case, tid, observe_only=body.observe_only))
     rec["input_refs"] = {k: v for k, v in rec["input_refs"].items() if not k.startswith("_")}
@@ -289,7 +310,10 @@ async def ingest_csv(file: UploadFile = File(...), tid: str = Depends(tenant), o
     runtime (observe-only by default) and appends the outcome from the resolution code. Returns the P&L."""
     from .retro import rows_from_csv, to_case, to_outcome, APPROVE_RIGHT, REJECT_RIGHT
     text_ = (await file.read()).decode("utf-8", errors="replace"); n = skipped = 0
-    for row in rows_from_csv(text_):
+    rows = rows_from_csv(text_)
+    if len(rows) > MAX_UPLOAD_ROWS: raise HTTPException(413, f"upload limited to {MAX_UPLOAD_ROWS} rows on this instance")
+    if _model_calls_today(tid) >= MAX_MODEL_CALLS_PER_DAY: raise HTTPException(429, "daily model-call budget reached")
+    for row in rows:
         res = (row.get("resolution") or "").strip().upper()
         if res not in APPROVE_RIGHT | REJECT_RIGHT: skipped += 1; continue
         body, truth = to_case(row, 5.0)
@@ -300,6 +324,14 @@ async def ingest_csv(file: UploadFile = File(...), tid: str = Depends(tenant), o
         o = to_outcome(row, truth, rec, dict(clerk=rate_clerk, supervisor=rate_supervisor, treasury=rate_treasury), minutes)
         outcome(body["case_id"], OutcomeIn(**o), tid); n += 1
     return dict(ingested=n, skipped=skipped, pnl={k: v for k, v in _pnl(tid).items() if k not in ("by_class", "sample")})
+
+@app.post("/v1/demo/reset")
+def demo_reset(tid: str = Depends(tenant)):
+    """Demo tenant only: forget its records so the next visitor starts clean. Production ledgers are never deleted."""
+    if not DEMO_TENANT or tid != DEMO_TENANT: raise HTTPException(403, "reset is only available on the demo tenant")
+    with Session() as s:
+        s.execute(Record.__table__.delete().where(Record.tenant_id == tid)); s.commit()
+    return {"reset": True}
 
 @app.get("/v1/pnl/report", response_class=HTMLResponse)
 def report(tid: str = Depends(tenant)): return render(_pnl(tid), manifest(tid))
