@@ -31,7 +31,25 @@ table.grid th,table.ledger th{text-align:left;font-weight:normal;color:var(--mut
 table.grid td,table.ledger td{border-bottom:1px solid var(--rule);padding:9px 8px 9px 0;vertical-align:top}
 td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.flag td{background:#fbf1ef}
 .wrap{overflow-x:auto}p.lede{margin:0 0 18px;max-width:62ch}
-</style></head><body><main>
+</style><script>
+const TIPS={D:"Class D \u2014 deterministic rules (the checklist): fixed checks a computer applies the same way every time. No model, no cost. Used first on every case.",
+S:"Class S \u2014 specialist tool: a narrow service that confirms one fact (bank-account verification, sanctions screen). A stub until a service is connected.",
+L:"Class L \u2014 local intelligence: a small, fast language model that reads the documents and judges legitimate-or-not with a reason. Used when rules cannot decide but the question is routine.",
+F:"Class F \u2014 frontier intelligence: a large language model, asked only when the small model could not reach the required evidence or the policy requires it.",
+M:"Class M \u2014 multi-model deliberation: several independent models, disagreements surfaced. Reserved for the highest-consequence judgements.",
+H:"Class H \u2014 a person, named by role. Evidence is gathered for them; they decide.",
+NONE:"Authority NONE: a person decides; the machine only gathers evidence.",RECOMMEND:"Authority RECOMMEND: the machine proposes, a named role approves or rejects.",
+ACT_NOTIFY:"Authority ACT and notify: the machine executes and tells a person afterwards.",ACT:"Authority ACT: the machine executes without notification; lowest-consequence cases only.",
+observed:"Observed: it happened and is on the record.",estimated:"Estimated: derived from a rate; shown, not counted.",counterfactual:"Counterfactual: what would have happened under a different allocation; a claim, not a fact.",
+unproven:"Unproven: a counterfactual whose outcomes have not yet matured; neither waste nor justified.",matured:"Matured: an outcome old enough (default 30 days) that it is unlikely to be reversed.",
+conservative:"Conservatively routed: the rules could not exclude a sensitive class, so the case was handled under the stricter one.",
+shadow:"Shadow: a cheaper class was also asked, its answer stored and never used, so we can later judge whether the expensive class was necessary."};
+function decorate(){document.querySelectorAll("td,th,span,b").forEach(el=>{if(el.children.length>1||el.hasAttribute("data-tip"))return;const t=el.textContent.trim();
+ const key=TIPS[t]?t:TIPS[t.toLowerCase()]?t.toLowerCase():(/^[DSLFMH](\s*\u2192\s*[DSLFMH])*$/.test(t)?t[0]:null);if(!key)return;el.setAttribute("data-tip",TIPS[key]);el.setAttribute("tabindex","0")})}
+document.addEventListener("DOMContentLoaded",decorate);
+</script>
+<style>[data-tip]{position:relative;cursor:help}[data-tip]:hover::after,[data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;left:0;top:calc(100% + 8px);z-index:50;width:max-content;max-width:320px;background:#14213D;color:#fff;font:13px/1.45 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif;padding:9px 11px;border-radius:6px;box-shadow:0 6px 18px rgba(20,33,61,.25);white-space:normal;text-align:left;pointer-events:none;font-weight:normal}</style>
+</head><body><main>
 <header><h1>{{PACK_TITLE}}<small>Intelligence P&amp;L — {{PROVIDER_LABEL}}, policy pack v{{POLICY_VERSION}}</small></h1><div class="period">{{N}} {{UNIT}}s · {{RANGE}}<br><a href="/v1/pnl/workflow" class="ui" style="font-size:13px">Graphical workflow takedown &rarr;</a></div></header>
 <nav class="ui" role="tablist"><button role="tab" aria-selected="true" id="t-bill">The bill</button><button role="tab" aria-selected="false" id="t-grid">Policy grid</button><button role="tab" aria-selected="false" id="t-ledger">Autonomy ledger</button><button role="tab" aria-selected="false" id="t-manifest">Providers and services</button></nav>
 
@@ -61,7 +79,7 @@ td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.
 </section>
 
 <section id="v-grid" role="tabpanel" hidden>
-<p class="lede ui">Read straight from <code>policy_ap.yaml</code>. Intelligence budget on the left, authority on the right; they are independent by design.</p>
+<p class="lede ui">Hover over any class letter (D, S, L, F, M, H), authority word or label for its meaning. Read straight from <code>policy_ap.yaml</code>. Intelligence budget on the left, authority on the right; they are independent by design.</p>
 <div class="wrap"><table class="grid ui"><thead><tr><th>Class</th><th>Max cost</th><th>Confidence</th><th>Evidence required</th><th>Autonomy ceiling</th><th>Person</th><th>This run</th></tr></thead>
 <tbody>{{GRID_ROWS}}</tbody></table></div>
 <p class="note ui" style="margin-top:14px">Effective autonomy = min(policy ceiling, risk-lens ceiling): the lens can lower authority, never raise it. Validation is checked before the budget gate. Unlimited budget on bank-detail changes; autonomy NONE.</p>

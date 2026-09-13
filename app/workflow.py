@@ -76,7 +76,9 @@ def render_workflow(w, title):
     rows = ""
     for s in w["steps"]:
         cost_lbl = f"&euro;{s['cost']:,.2f} people" if s.get("people") else f"${s['cost']:.4f} model"
-        rows += f'''<tr><td class="stepname"><span class="dot" style="background:{s['colour']}"></span>{e(s['name'])}<small>{e(s['who'])}</small></td>
+        tipmap = {"D": "Class D: deterministic rules, the checklist. Free, used first.", "S": "Class S: specialist tool that confirms one fact. Stub until connected.", "L": "Class L: small language model, the junior reviewer.", "F": "Class F: large language model, the senior reviewer, asked only when needed.", "M": "Class M: several independent models, the panel."}
+        tp = next((tipmap[k] for k in tipmap if s['name'].endswith(" " + k)), "")
+        rows += f'''<tr><td class="stepname" {("data-tip=\"" + e(tp) + "\"") if tp else ""}><span class="dot" style="background:{s['colour']}"></span>{e(s['name'])}<small>{e(s['who'])}</small></td>
         <td class="num">{s['cases']:,}</td>
         <td><svg class="bar" viewBox="0 0 260 14">{bar(s['cost'], maxcost, COL['cost'])}</svg><small>{cost_lbl}</small></td>
         <td><svg class="bar" viewBox="0 0 260 14">{bar(s['ms'], maxms, COL['time'])}</svg><small>{s['ms']:.0f} ms</small></td>
@@ -86,7 +88,8 @@ def render_workflow(w, title):
     autbar = "".join(f'<div style="width:{100*a[k]/tot:.2f}%;background:{c}" title="{k} {a[k]}"></div>' for k, c in (("NONE", COL["none"]), ("RECOMMEND", COL["rec"]), ("ACT_NOTIFY", COL["notify"]), ("ACT", COL["act"])))
     autleg = " &middot; ".join(f'<span><i style="background:{c}"></i>{k.replace("_", " and ")} {a[k]:,}</span>' for k, c in (("NONE", COL["none"]), ("RECOMMEND", COL["rec"]), ("ACT_NOTIFY", COL["notify"]), ("ACT", COL["act"])))
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><title>{e(title)} &mdash; workflow takedown</title>
-<style>body{{margin:0;background:#fff;color:#14213D;font:16px/1.5 Georgia,"Times New Roman",serif}}main{{max-width:1000px;margin:0 auto;padding:40px 24px 80px}}
+<style>[data-tip]{{position:relative;cursor:help}}[data-tip]:hover::after{{content:attr(data-tip);position:absolute;left:0;top:calc(100% + 8px);z-index:50;width:max-content;max-width:320px;background:#14213D;color:#fff;font:13px/1.45 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif;padding:9px 11px;border-radius:6px;white-space:normal;pointer-events:none}}
+body{{margin:0;background:#fff;color:#14213D;font:16px/1.5 Georgia,"Times New Roman",serif}}main{{max-width:1000px;margin:0 auto;padding:40px 24px 80px}}
 h1{{font-size:30px;font-weight:normal;margin:0 0 4px}}.sub{{color:#6B7590;font:14px -apple-system,"Segoe UI",Helvetica,Arial,sans-serif;margin:0 0 26px}}
 h2{{font-size:21px;font-weight:normal;margin:34px 0 10px;padding-left:12px;border-left:6px solid #14213D}}
 table{{width:100%;border-collapse:collapse;font:14px/1.4 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif}}th{{text-align:left;background:#F5F7FB;border-bottom:2px solid #14213D;padding:8px}}td{{border-bottom:1px solid #E2E6EF;padding:9px 8px;vertical-align:top}}
