@@ -103,7 +103,11 @@ class Runtime:
         aut = self.policy_autonomy(pol, case)
         eff = AUT[min(AUT.index(aut), AUT.index(lens))]                      # min(policy, lens)
         if observe_only: eff = "NONE"                                        # [0076]
-        eligibility, path, shadow, declined = [], [], None, []
+        eligibility, path, shadow, declined, envelope = [], [], None, [], []
+        for x in (case.input_refs.get("extraction") and [case.input_refs["extraction"]] or []):   # adapter-side extraction step (e.g. Document AI / vision model)
+            envelope.append(dict(component="extraction", cls="S", provider=str(x.get("model", "")).split("-")[0] or "extraction", service=x.get("model"), native_meter="tokens" if "tokens_in" in x else "documents",
+                                 native_quantity=dict(tokens_in=x.get("tokens_in", 0), tokens_out=x.get("tokens_out", 0)) if "tokens_in" in x else dict(documents=1),
+                                 contract_rate=None, direct_cost=x.get("cost_usd"), allocated_cost=None, currency="USD", cost_evidence="ESTIMATED"))
         cost, lat, level, reason, conf, verdict = 0.0, 0, 0, None, None, None
         tokens = dict(tokens_in=0, tokens_out=0); adapters, regions = set(), set()
         ceiling = pol["level_ceiling"]
@@ -128,6 +132,10 @@ class Runtime:
             if r.provider_region: regions.add(r.provider_region)
             step = dict(level=level + 1, cls=icls, outcome_code=r.outcome_code, verdict=r.verdict, confidence=round(r.confidence, 4), cost=spec["cost"],
                         tokens_in=r.tokens_in, tokens_out=r.tokens_out, elapsed_ms=r.elapsed_ms, reason=r.reason)
+            envelope.append(dict(component="intelligence", cls=icls, provider=(r.adapter_id or "").split(":")[0] or icls, service=(r.adapter_id or icls),
+                                 native_meter=("tokens" if icls in ("L", "F", "M") else "invocation"), native_quantity=dict(tokens_in=r.tokens_in, tokens_out=r.tokens_out) if icls in ("L", "F", "M") else dict(calls=1),
+                                 contract_rate=None, direct_cost=None, allocated_cost=spec["cost"], currency=self.p.get("currency", "EUR"),
+                                 cost_evidence="ESTIMATED"))   # rate-card / pack allocation until a provider bill reconciles it to METERED
             path.append(step)
             if r.outcome_code != "OK":                                       # policy-specified failure handling: no implicit escalation
                 reason = f"invocation_{r.outcome_code.lower()}"; break
@@ -158,6 +166,8 @@ class Runtime:
             cost=round(cost, 4), latency_ms=lat, **tokens, adapter_ids=sorted(adapters), provider_regions=sorted(regions),
             confidence=conf, risk_score=score, lens_ceiling=lens, autonomy_policy=aut, autonomy_effective=eff,
             observe_only=observe_only, action=action, human=human, reason=reason, maturity="PENDING",
+            cost_envelope=envelope,                                   # Decision Cost Envelope: components with native meters; human component appended at outcome
+            evidence_label=(case.input_refs.get("provenance") or {}).get("evidence_label") or dict(models=("SIMULATED" if type(self.prov).__name__ == "SimulatedProvider" else "REAL"), cases="SYNTHETIC", outcomes="CONSTRUCTED"),
             record_hash=None)
 
 def seal(rec: dict) -> dict:

@@ -136,6 +136,14 @@ def outcome(case_id: str, body: OutcomeIn, tid: str = Depends(tenant)):
                           approver_ids=(body.human or {}).get("approver_ids", []), shadow_correct=shadow_ok, detail=body.detail or {},
                           observed_at=dt.datetime.utcnow().isoformat())
     rec["maturity"] = "OBSERVED"
+    hc = rec["outcome"]["human_cost"]
+    env = list(rec.get("cost_envelope") or [])
+    if touches: env.append(dict(component="human", cls="H", provider="tenant", service=(prev.get("human") or {}).get("role", "person"), native_meter="touches", native_quantity=dict(touches=touches),
+                               contract_rate=(hc / touches if touches else None), direct_cost=None, allocated_cost=hc, currency=POLICY.get("currency", "EUR"),
+                               cost_evidence=("ALLOCATED" if (body.human or {}).get("human_cost_override") is None else "METERED")))
+    rec["cost_envelope"] = env
+    rec["total_decision_cost"] = dict(intelligence=round(sum((e.get("allocated_cost") or e.get("direct_cost") or 0) for e in env if e["component"] != "human"), 6),
+                                      human=round(hc, 2), by_evidence={k: round(sum((e.get("allocated_cost") or e.get("direct_cost") or 0) for e in env if e["cost_evidence"] == k), 6) for k in ("METERED", "ALLOCATED", "ESTIMATED")})
     seal(rec); _insert(rec, tid)
     return rec
 
@@ -287,7 +295,11 @@ def manifest(tid: str = Depends(tenant)):
                         measured_cost_per_call_usd=round((row["tokens_in"] * pin + row["tokens_out"] * pout) / 1e6 / ok, 6) if ok else None,
                         mean_latency_ms=round(row["ms"] / row["ok_ms"]) if row["ok_ms"] else None))
     versions = sorted({a for r in recs for a in (r.get("adapter_ids") or [])})
-    return dict(n=len(recs), pack=f"{POLICY['pack']}/{POLICY['version']}", provider=type(RUNTIME.prov).__name__, price_table_usd_per_mtok=PRICE,
+    by_ev = {}
+    for r in recs:
+        for e_ in (r.get("cost_envelope") or []): by_ev[e_["cost_evidence"]] = round(by_ev.get(e_["cost_evidence"], 0) + (e_.get("allocated_cost") or e_.get("direct_cost") or 0), 4)
+    return dict(n=len(recs), pack=f"{POLICY['pack']}/{POLICY['version']}", provider=type(RUNTIME.prov).__name__, price_table_usd_per_mtok=PRICE, cost_by_evidence=by_ev,
+                evidence_labels=sorted({json.dumps(r.get("evidence_label"), sort_keys=True) for r in recs}),
                 regions=sorted({x for r in recs for x in (r.get("provider_regions") or [])}), adapter_ids=versions,
                 data_left_the_adapter=["evidence fields named in the policy pack only"], rows=sorted(out, key=lambda x: x["cls"]),
                 total_measured_cost_usd=round(sum(x["measured_cost_total_usd"] for x in out), 4))
