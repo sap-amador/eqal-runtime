@@ -36,6 +36,8 @@ class Invocation:
     provider_region: str | None = None
     elapsed_ms: int = 0
     reason: str = ""
+    stated_confidence: float | None = None
+    calibration: dict | None = None
 
 class Provider(Protocol):
     def invoke(self, icls: str, exception_class: str, case: "Case") -> Invocation: ...
@@ -132,7 +134,8 @@ class Runtime:
             if r.adapter_id: adapters.add(r.adapter_id)
             if r.provider_region: regions.add(r.provider_region)
             step = dict(level=level + 1, cls=icls, outcome_code=r.outcome_code, verdict=r.verdict, confidence=round(r.confidence, 4), cost=spec["cost"],
-                        tokens_in=r.tokens_in, tokens_out=r.tokens_out, elapsed_ms=r.elapsed_ms, reason=r.reason)
+                        tokens_in=r.tokens_in, tokens_out=r.tokens_out, elapsed_ms=r.elapsed_ms, reason=r.reason,
+                        stated_confidence=r.stated_confidence, confidence_adapter=((r.adapter_id or "").split(":", 1)[1] if r.adapter_id and ":" in r.adapter_id else "self-report-v1"), calibration=r.calibration)
             envelope.append(dict(component="intelligence", cls=icls, provider=(r.adapter_id or "").split(":")[0] or icls, service=(r.adapter_id or icls),
                                  native_meter=("tokens" if icls in ("L", "F", "M") else "invocation"), native_quantity=dict(tokens_in=r.tokens_in, tokens_out=r.tokens_out) if icls in ("L", "F", "M") else dict(calls=1),
                                  contract_rate=None, direct_cost=None, allocated_cost=spec["cost"], currency=self.p.get("currency", "EUR"),

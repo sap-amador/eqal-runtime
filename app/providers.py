@@ -3,7 +3,7 @@ the service on synthetic cases reproduces the reference numbers. gateway: D and 
 attached by the adapter (rule results, verification results, classification candidates);
 L, F, M go to an OpenAI-compatible endpoint (LiteLLM / OpenRouter / Azure), one alias
 per class, EU region only. Only the evidence fields in case.input_refs are sent."""
-import os, json, random, time, urllib.request, urllib.error
+import os, json, math, random, time, urllib.request, urllib.error
 from .runtime import Invocation, Case
 
 class SimulatedProvider:
@@ -50,8 +50,34 @@ Evidence (the only information available; do not assume anything beyond it):
 Answer with a single JSON object and nothing else:
 {{"approve": true or false, "confidence": <0.50 to 0.99, your calibrated probability that your answer is right>, "reason": "<one sentence>"}}"""
 
+class Calibration:
+    """Confidence adapter (specification: confidence adapters). Maps a model's stated confidence to the
+    accuracy it has actually shown in that bucket for that class, from calibration.json (scripts/measure.py).
+    Conservative: uses the 95% Wilson lower bound, and only where the bucket has at least EQAL_CAL_MIN_N
+    outcomes; otherwise the stated value is used and the adapter id says so."""
+    def __init__(self, path):
+        self.table = {}; self.path = path
+        try: self.table = json.load(open(path))
+        except Exception: self.table = {}
+        self.min_n = int(os.getenv("EQAL_CAL_MIN_N", "20"))
+    @staticmethod
+    def wilson_low(k, n, z=1.96):
+        if n == 0: return 0.0
+        p = k / n; d = 1 + z * z / n; c = p + z * z / (2 * n); a = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+        return (c - a) / d
+    def apply(self, cls, stated):
+        """Returns (confidence, adapter_tag, basis)."""
+        b = self.table.get(cls, {}).get("calibration", {})
+        key = f"{int(stated * 20) / 20:.2f}"
+        row = b.get(key)
+        if not row or row.get("n", 0) < self.min_n: return stated, "self-report-v1", None
+        n = row["n"]; k = round(row["accuracy"] * n); bound = os.getenv("EQAL_CAL_BOUND", "lower95")
+        val = row["accuracy"] if bound == "point" else self.wilson_low(k, n)
+        return round(min(0.9999, val), 4), f"calibrated-v1:{bound}", dict(bucket=key, n=n, observed=row["accuracy"], bound=bound, source=os.path.basename(self.path))
+
 class GatewayProvider:
     def __init__(self):
+        self.cal = Calibration(os.environ["EQAL_CALIBRATION_FILE"]) if os.getenv("EQAL_CALIBRATION_FILE") else None
         self.base = os.environ["EQAL_GATEWAY_URL"].rstrip("/"); self.key = os.environ["EQAL_GATEWAY_KEY"]
         self.models = {c: os.getenv(f"EQAL_MODEL_{c}", c.lower()) for c in ("L", "F", "M")}
         self.price = {c: (float(os.getenv(f"EQAL_PRICE_{c}_IN", "0")), float(os.getenv(f"EQAL_PRICE_{c}_OUT", "0"))) for c in ("L", "F", "M")}   # USD per 1M tokens
@@ -72,9 +98,10 @@ class GatewayProvider:
                 txt = out["choices"][0]["message"]["content"].strip().strip("`")
                 if txt.startswith("json"): txt = txt[4:]
                 j = json.loads(txt); u = out.get("usage", {})
-                conf = min(0.9999, max(0.5, float(j["confidence"])))
+                stated = min(0.9999, max(0.5, float(j["confidence"]))); conf, tag, basis = (self.cal.apply(icls, stated) if self.cal else (stated, "self-report-v1", None))
                 return Invocation(verdict=bool(j["approve"]), confidence=conf, tokens_in=u.get("prompt_tokens", 0), tokens_out=u.get("completion_tokens", 0),
-                                  adapter_id=f"gw-{self.models[icls]}:self-report-v1", provider_region=self.region, elapsed_ms=int((time.time() - t0) * 1000), reason=str(j.get("reason", ""))[:200])
+                                  adapter_id=f"gw-{self.models[icls]}:{tag}", provider_region=self.region, elapsed_ms=int((time.time() - t0) * 1000), reason=str(j.get("reason", ""))[:200],
+                                  stated_confidence=stated, calibration=basis)
             except urllib.error.HTTPError as ex:
                 detail = ""
                 try: detail = ex.read().decode()[:200]
