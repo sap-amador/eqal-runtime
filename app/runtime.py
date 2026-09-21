@@ -12,7 +12,7 @@ Vocabulary: autonomy NONE < RECOMMEND < ACT_NOTIFY < ACT; level ceiling in {0,1,
 classes D/S/L/F/M. No ERP, no vendor, no simulation in this file.
 """
 from __future__ import annotations
-import copy, hashlib, json, yaml
+import copy, hashlib, json, os, yaml
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
@@ -103,7 +103,7 @@ class Runtime:
         aut = self.policy_autonomy(pol, case)
         eff = AUT[min(AUT.index(aut), AUT.index(lens))]                      # min(policy, lens)
         if observe_only: eff = "NONE"                                        # [0076]
-        eligibility, path, shadow, declined, envelope = [], [], None, [], []
+        eligibility, path, shadow, declined, envelope, shadows = [], [], None, [], [], []
         for x in (case.input_refs.get("extraction") and [case.input_refs["extraction"]] or []):   # adapter-side extraction step (e.g. Document AI / vision model)
             envelope.append(dict(component="extraction", cls="S", provider=str(x.get("model", "")).split("-")[0] or "extraction", service=x.get("model"), native_meter="tokens" if "tokens_in" in x else "documents",
                                  native_quantity=dict(tokens_in=x.get("tokens_in", 0), tokens_out=x.get("tokens_out", 0)) if "tokens_in" in x else dict(documents=1),
@@ -119,6 +119,7 @@ class Runtime:
             if val == "shadow_only":
                 r = self.prov.invoke(icls, k, case)
                 shadow = dict(cls=icls, verdict=r.verdict, confidence=r.confidence, outcome_code=r.outcome_code)
+                shadows.append(dict(role="shadow", position="validation", cls=icls, verdict=r.verdict, confidence=round(r.confidence, 4), outcome_code=r.outcome_code, cost=spec["cost"]))
                 eligibility.append(dict(cls=icls, eligible=True, reason="SHADOW_ONLY")); continue
             if b["max_cost"] is not None and cost + spec["cost"] > b["max_cost"] + 1e-9:                 # 350
                 eligibility.append(dict(cls=icls, eligible=False, reason="BUDGET_COST")); declined.append(icls); reason = "budget"; break
@@ -148,6 +149,18 @@ class Runtime:
         ref = pol.get("shadow_reference")
         if ref and len(path) > 1 and path[0]["cls"] == ref and shadow is None:
             shadow = dict(cls=ref, verdict=path[0]["verdict"], confidence=path[0]["confidence"], outcome_code="OK")
+        for s in path[:-1]:   # every lower class that ran before escalation is a shadow "below" the deciding class
+            shadows.append(dict(role="shadow", position="below", cls=s["cls"], verdict=s["verdict"], confidence=s["confidence"], outcome_code=s["outcome_code"], cost=s["cost"]))
+        # shadow ABOVE: the next eligible class after the one that decided; run and stored, never used. Off by default (a call per case);
+        # enable per class (shadow_above: true) or globally with EQAL_SHADOW_ABOVE=1 on measurement runs. Needed for under-intelligence (UIR).
+        if not observe_only and path and reason == "threshold" and (pol.get("shadow_above") or os.getenv("EQAL_SHADOW_ABOVE") == "1"):
+            nxt = [c for c in pol["path"][pol["path"].index(path[-1]["cls"]) + 1:] if pol.get("validation", {}).get(c, "permitted") == "permitted"]
+            if nxt:
+                r2 = self.prov.invoke(nxt[0], k, case); sp2 = self.C[nxt[0]]
+                shadows.append(dict(role="shadow", position="above", cls=nxt[0], verdict=r2.verdict, confidence=round(r2.confidence, 4), outcome_code=r2.outcome_code, cost=sp2["cost"]))
+                envelope.append(dict(component="shadow", cls=nxt[0], provider=(r2.adapter_id or "").split(":")[0] or nxt[0], service=(r2.adapter_id or nxt[0]), native_meter="tokens",
+                                     native_quantity=dict(tokens_in=r2.tokens_in, tokens_out=r2.tokens_out), contract_rate=None, direct_cost=None, allocated_cost=sp2["cost"],
+                                     currency=self.p.get("currency", "EUR"), quantity_source="RESPONSE", cost_evidence="ESTIMATED"))
         acts = reason == "threshold" and eff in ("ACT", "ACT_NOTIFY")
         hr = pol["human_rule"]
         if acts:   # the path that did NOT run: a person. Modelled, never counted as a saving without an accounting basis.
@@ -165,7 +178,9 @@ class Runtime:
             exception_class=k, classification=clog, conservatively_routed=conservative,
             input_refs=case.input_refs, evidence_required=pol["evidence_required"], evidence_hashes=case.evidence_hashes,
             harm_class=case.harm_class, reversible=case.reversible,
-            eligibility=eligibility, path=path, declined=declined, shadow=shadow,
+            eligibility=eligibility, path=path, declined=declined, shadow=shadow, shadows=shadows,
+            capability_type=pol.get("capability_type", self.p.get("capability_type", "document_judgement")),
+            task_fingerprint=f"{k}:{pol.get('capability_type', self.p.get('capability_type', 'document_judgement'))}",
             budget=dict(max_cost=b["max_cost"], evidence=b["evidence"], max_latency_ms=b.get("max_latency_ms"), consequence=cons),
             cost=round(cost, 4), latency_ms=lat, **tokens, adapter_ids=sorted(adapters), provider_regions=sorted(regions),
             confidence=conf, risk_score=score, lens_ceiling=lens, autonomy_policy=aut, autonomy_effective=eff,

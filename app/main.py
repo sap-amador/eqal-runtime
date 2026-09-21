@@ -131,6 +131,8 @@ def outcome(case_id: str, body: OutcomeIn, tid: str = Depends(tenant)):
     shadow_ok = None
     if prev.get("shadow") and body.truth is not None and prev["shadow"].get("verdict") is not None:
         shadow_ok = prev["shadow"]["verdict"] == body.truth
+    if body.truth is not None:
+        rec["shadows"] = [dict(s, correct=(s.get("verdict") == body.truth) if s.get("verdict") is not None else None) for s in (prev.get("shadows") or [])]
     rec["outcome"] = dict(kind=body.kind, value=body.value, correct=body.correct, truth=body.truth, realised_effect=body.realised_effect or 0.0,
                           human_touches=touches, human_cost=((body.human or {}).get("human_cost_override") if (body.human or {}).get("human_cost_override") is not None else touches * POLICY["human_touch_cost"]), override=(body.human or {}).get("override", False),
                           approver_ids=(body.human or {}).get("approver_ids", []), shadow_correct=shadow_ok, detail=body.detail or {},
@@ -397,6 +399,37 @@ def demo_reset(tid: str = Depends(tenant)):
     with Session() as s:
         s.execute(Record.__table__.delete().where(Record.tenant_id == tid)); s.commit()
     return {"reset": True}
+
+@app.get("/v1/metrics")
+def metrics(tid: str = Depends(tenant), basis: str = Query("OBSERVED", pattern="^(MATURE|OBSERVED)$")):
+    """Allocation KPIs per task fingerprint, from the ledger. Evidence-labelled: SAR and CPSO are OBSERVED; MEAR, OIR, UIR,
+    AIS, IAR and escalation precision depend on shadow answers (COUNTERFACTUAL), and are UNPROVEN until outcomes mature.
+    Named instances of the specification's ledger-derived reports (necessity/waste, unproven spend, sensitivity)."""
+    recs = [r for r in _latest(tid) if r.get("outcome") and r["outcome"].get("correct") is not None and (r["maturity"] == "MATURE" if basis == "MATURE" else True)]
+    ec = POLICY["exception_classes"]; out = {}; lab = "COUNTERFACTUAL" if basis == "MATURE" else "UNPROVEN"
+    for fp in sorted({r["task_fingerprint"] for r in recs if r.get("task_fingerprint")}):
+        rs = [r for r in recs if r.get("task_fingerprint") == fp]; n = len(rs); k = fp.split(":")[0]; theta = ec.get(k, {}).get("budget", {}).get("evidence") or 0
+        correct = [r for r in rs if r["outcome"]["correct"]]
+        cheaper = lambda r: any(s["position"] == "below" and s.get("correct") and s["confidence"] >= theta for s in r.get("shadows") or [])
+        higher_right = lambda r: any(s["position"] == "above" and s.get("correct") for s in r.get("shadows") or [])
+        over = [r for r in rs if cheaper(r)]
+        under = [r for r in rs if not r["outcome"]["correct"] and (r["reason"] in ("ceiling", "budget", "latency") or higher_right(r))]
+        esc = [r for r in rs if len(r["path"]) > 1]
+        esc_needed = [r for r in esc if r["outcome"]["correct"] and not any(s["position"] == "below" and s.get("correct") for s in r.get("shadows") or [])]
+        ais = sum(sum(s["cost"] for s in r["path"][1:]) for r in over)
+        regret = sorted(round(r["cost"] - min([s["cost"] for s in r.get("shadows") or [] if s["position"] == "below" and s.get("correct") and s["confidence"] >= theta] or [r["cost"]]), 6) for r in rs)
+        total_cost = sum(r["cost"] for r in rs) + sum(r["outcome"]["human_cost"] for r in rs)
+        above_cov = sum(1 for r in rs if any(s["position"] == "above" for s in r.get("shadows") or [])) / n
+        out[fp] = dict(n=n, basis=basis, evidence_threshold=theta,
+            SAR=dict(value=round(len(correct) / n, 4), label="OBSERVED", meaning="share of decisions whose business outcome was correct"),
+            CPSO=dict(value=round(total_cost / len(correct), 4) if correct else None, label="OBSERVED", meaning="cost per successful outcome, intelligence + people; cheap-but-wrong is penalised"),
+            MEAR=dict(value=round(1 - len([r for r in correct if cheaper(r)]) / len(correct), 4) if correct else None, label=lab, meaning="share of correct decisions where no cheaper class also met the evidence threshold"),
+            OIR=dict(value=round(len(over) / n, 4), label=lab, meaning="share of decisions where a cheaper class met the threshold and was right"),
+            UIR=dict(value=round(len(under) / n, 4), label=lab, shadow_above_coverage=round(above_cov, 3), meaning="share where the chosen class was insufficient: escalated and still wrong, or wrong while the class above (shadow) was right; a lower bound unless shadow-above coverage is 1.0"),
+            AIS=dict(value=round(ais, 6), label=lab, meaning="spend above the cheapest class that met the threshold, on the cases where one did"),
+            IAR=dict(median=regret[len(regret) // 2] if regret else 0, p90=regret[int(0.9 * (len(regret) - 1))] if regret else 0, label=lab, meaning="allocation regret: actual cost minus cheapest sufficient class in hindsight"),
+            escalation_precision=dict(value=round(len(esc_needed) / len(esc), 4) if esc else None, escalated=len(esc), label=lab, meaning="share of escalations where the lower class was wrong and the higher class was right"))
+    return dict(pack=f"{POLICY['pack']}/{POLICY['version']}", basis=basis, n=len(recs), fingerprints=out)
 
 @app.get("/v1/pnl/report", response_class=HTMLResponse)
 def report(tid: str = Depends(tenant)): return render(_pnl(tid), manifest(tid))
