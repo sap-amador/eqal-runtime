@@ -140,10 +140,10 @@ def outcome(case_id: str, body: OutcomeIn, tid: str = Depends(tenant)):
     env = list(rec.get("cost_envelope") or [])
     if touches: env.append(dict(component="human", cls="H", provider="tenant", service=(prev.get("human") or {}).get("role", "person"), native_meter="touches", native_quantity=dict(touches=touches),
                                contract_rate=(hc / touches if touches else None), direct_cost=None, allocated_cost=hc, currency=POLICY.get("currency", "EUR"),
+                               quantity_source=("DERIVED" if (body.human or {}).get("human_cost_override") is None else "USAGE_API"),
                                cost_evidence=("ALLOCATED" if (body.human or {}).get("human_cost_override") is None else "METERED")))
     rec["cost_envelope"] = env
-    rec["total_decision_cost"] = dict(intelligence=round(sum((e.get("allocated_cost") or e.get("direct_cost") or 0) for e in env if e["component"] != "human"), 6),
-                                      human=round(hc, 2), by_evidence={k: round(sum((e.get("allocated_cost") or e.get("direct_cost") or 0) for e in env if e["cost_evidence"] == k), 6) for k in ("METERED", "ALLOCATED", "ESTIMATED")})
+    rec["total_decision_cost"] = _totals(env)
     seal(rec); _insert(rec, tid)
     return rec
 
@@ -169,6 +169,55 @@ def versions(case_id: str, tid: str = Depends(tenant)):
     with Session() as s:
         rows = s.execute(select(Record).where(Record.tenant_id == tid, Record.case_id == case_id).order_by(Record.version)).scalars().all()
     return [json.loads(r.payload) for r in rows]
+
+def _val(e): return (e.get("metered_value") if e.get("metered_value") is not None else (e.get("allocated_cost") if e.get("allocated_cost") is not None else e.get("direct_cost")) or 0)
+def _totals(env):
+    ran = [e for e in env if e["cost_evidence"] != "COUNTERFACTUAL"]
+    return dict(intelligence=round(sum(_val(e) for e in ran if e["component"] not in ("human",)), 6), human=round(sum(_val(e) for e in ran if e["component"] == "human"), 2),
+                counterfactual_alternative=round(sum(_val(e) for e in env if e["cost_evidence"] == "COUNTERFACTUAL"), 2),
+                by_evidence={k: round(sum(_val(e) for e in env if e["cost_evidence"] == k), 6) for k in ("METERED", "ALLOCATED", "ESTIMATED", "COUNTERFACTUAL")})
+
+class ReconcileIn(BaseModel):
+    service: str                       # matches cost_envelope[].service, e.g. "gw-mistral-small-latest:self-report-v1" or a provider prefix with match="prefix"
+    period_start: str                  # ISO date, inclusive (record created_at)
+    period_end: str                    # ISO date, exclusive
+    metered_total: float               # what the provider billed for that service in the period
+    currency: str = "USD"
+    source: str = "BILLING_EXPORT"     # USAGE_API | BILLING_EXPORT | EVENT | TRACE
+    match: str = "exact"               # exact | prefix
+    reference: str | None = None       # invoice number / export file
+
+@app.post("/v1/reconcile")
+def reconcile(body: ReconcileIn, tid: str = Depends(tenant)):
+    """Reconcile ESTIMATED components to a provider's metered total for a period. Estimated values are preserved;
+    metered values are added; each affected record gets a new version. Exact correlation (per-record metered amount) is
+    not implemented here; variance is apportioned by native quantity under a documented rule."""
+    ps, pe = dt.datetime.fromisoformat(body.period_start), dt.datetime.fromisoformat(body.period_end)
+    with Session() as s:
+        sub = select(Record.case_id, func.max(Record.version).label("v")).where(Record.tenant_id == tid, Record.created_at >= ps, Record.created_at < pe).group_by(Record.case_id).subquery()
+        rows = s.execute(select(Record).join(sub, (Record.case_id == sub.c.case_id) & (Record.version == sub.c.v)).where(Record.tenant_id == tid)).scalars().all()
+    recs = [json.loads(r.payload) for r in rows]
+    hit = lambda e: (e.get("service") == body.service) if body.match == "exact" else str(e.get("service", "")).startswith(body.service)
+    comps = [(rec, e) for rec in recs for e in (rec.get("cost_envelope") or []) if hit(e) and e["cost_evidence"] in ("ESTIMATED", "METERED")]
+    if not comps: raise HTTPException(404, "no components match that service in the period")
+    qty = lambda e: sum(v for v in e.get("native_quantity", {}).values() if isinstance(v, (int, float))) or 1
+    total_qty = sum(qty(e) for _, e in comps); est_total = sum(((e.get("direct_cost") if e.get("direct_cost") is not None else e.get("allocated_cost")) or 0) for _, e in comps)
+    factor = (body.metered_total / est_total) if est_total else None
+    stamp = dict(period=[body.period_start, body.period_end], metered_total=body.metered_total, currency=body.currency, source=body.source, reference=body.reference,
+                 estimated_total=round(est_total, 6), factor=(round(factor, 4) if factor else None), rule="variance apportioned by native quantity", at=dt.datetime.utcnow().isoformat())
+    n = 0
+    for rec in {id(r): r for r, _ in comps}.values():
+        new = dict(rec); new["version"] = rec["version"] + 1; new["prior_hash"] = rec.get("record_hash"); env = []
+        for e in rec.get("cost_envelope") or []:
+            e = dict(e)
+            if hit(e) and e["cost_evidence"] in ("ESTIMATED", "METERED"):
+                e["estimated_value"] = e.get("estimated_value", (e.get("direct_cost") if e.get("direct_cost") is not None else e.get("allocated_cost")) or 0)
+                e["metered_value"] = round(body.metered_total * qty(e) / total_qty, 6); e["cost_evidence"] = "METERED"; e["quantity_source"] = body.source; e["reconciliation"] = stamp
+                e["variance_pct"] = round((e["metered_value"] - e["estimated_value"]) / e["estimated_value"] * 100, 2) if e["estimated_value"] else None
+            env.append(e)
+        new["cost_envelope"] = env; new["total_decision_cost"] = _totals(env)
+        seal(new); _insert(new, tid); n += 1
+    return dict(reconciled_records=n, components=len(comps), **stamp)
 
 # ---------------------------------------------------------------- P&L ([0044]-[0049]) and governance
 def _pnl(tid: str) -> dict:
@@ -297,8 +346,12 @@ def manifest(tid: str = Depends(tenant)):
     versions = sorted({a for r in recs for a in (r.get("adapter_ids") or [])})
     by_ev = {}
     for r in recs:
-        for e_ in (r.get("cost_envelope") or []): by_ev[e_["cost_evidence"]] = round(by_ev.get(e_["cost_evidence"], 0) + (e_.get("allocated_cost") or e_.get("direct_cost") or 0), 4)
-    return dict(n=len(recs), pack=f"{POLICY['pack']}/{POLICY['version']}", provider=type(RUNTIME.prov).__name__, price_table_usd_per_mtok=PRICE, cost_by_evidence=by_ev,
+        for e_ in (r.get("cost_envelope") or []): by_ev[e_["cost_evidence"]] = round(by_ev.get(e_["cost_evidence"], 0) + _val(e_), 4)
+    ran = sum(v for k, v in by_ev.items() if k != "COUNTERFACTUAL") or 1
+    coverage = {k: round(by_ev.get(k, 0) / ran, 4) for k in ("METERED", "ALLOCATED", "ESTIMATED")}
+    var = [e_.get("variance_pct") for r in recs for e_ in (r.get("cost_envelope") or []) if e_.get("variance_pct") is not None]
+    return dict(n=len(recs), pack=f"{POLICY['pack']}/{POLICY['version']}", provider=type(RUNTIME.prov).__name__, price_table_usd_per_mtok=PRICE, cost_by_evidence=by_ev, cost_attribution_coverage=coverage,
+                estimate_vs_metered_variance_pct=(round(st.mean(var), 2) if var else None),
                 evidence_labels=sorted({json.dumps(r.get("evidence_label"), sort_keys=True) for r in recs}),
                 regions=sorted({x for r in recs for x in (r.get("provider_regions") or [])}), adapter_ids=versions,
                 data_left_the_adapter=["evidence fields named in the policy pack only"], rows=sorted(out, key=lambda x: x["cls"]),

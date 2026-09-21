@@ -107,7 +107,7 @@ class Runtime:
         for x in (case.input_refs.get("extraction") and [case.input_refs["extraction"]] or []):   # adapter-side extraction step (e.g. Document AI / vision model)
             envelope.append(dict(component="extraction", cls="S", provider=str(x.get("model", "")).split("-")[0] or "extraction", service=x.get("model"), native_meter="tokens" if "tokens_in" in x else "documents",
                                  native_quantity=dict(tokens_in=x.get("tokens_in", 0), tokens_out=x.get("tokens_out", 0)) if "tokens_in" in x else dict(documents=1),
-                                 contract_rate=None, direct_cost=x.get("cost_usd"), allocated_cost=None, currency="USD", cost_evidence="ESTIMATED"))
+                                 contract_rate=None, direct_cost=x.get("cost_usd"), allocated_cost=None, currency="USD", quantity_source=x.get("quantity_source", "RESPONSE"), cost_evidence="ESTIMATED"))
         cost, lat, level, reason, conf, verdict = 0.0, 0, 0, None, None, None
         tokens = dict(tokens_in=0, tokens_out=0); adapters, regions = set(), set()
         ceiling = pol["level_ceiling"]
@@ -135,7 +135,7 @@ class Runtime:
             envelope.append(dict(component="intelligence", cls=icls, provider=(r.adapter_id or "").split(":")[0] or icls, service=(r.adapter_id or icls),
                                  native_meter=("tokens" if icls in ("L", "F", "M") else "invocation"), native_quantity=dict(tokens_in=r.tokens_in, tokens_out=r.tokens_out) if icls in ("L", "F", "M") else dict(calls=1),
                                  contract_rate=None, direct_cost=None, allocated_cost=spec["cost"], currency=self.p.get("currency", "EUR"),
-                                 cost_evidence="ESTIMATED"))   # rate-card / pack allocation until a provider bill reconciles it to METERED
+                                 quantity_source=("RESPONSE" if icls in ("L", "F", "M") else "DERIVED"), cost_evidence="ESTIMATED"))   # ESTIMATED until a bill reconciles it
             path.append(step)
             if r.outcome_code != "OK":                                       # policy-specified failure handling: no implicit escalation
                 reason = f"invocation_{r.outcome_code.lower()}"; break
@@ -150,6 +150,10 @@ class Runtime:
             shadow = dict(cls=ref, verdict=path[0]["verdict"], confidence=path[0]["confidence"], outcome_code="OK")
         acts = reason == "threshold" and eff in ("ACT", "ACT_NOTIFY")
         hr = pol["human_rule"]
+        if acts:   # the path that did NOT run: a person. Modelled, never counted as a saving without an accounting basis.
+            envelope.append(dict(component="human_alternative", cls="H", provider="tenant", service=hr["role"], native_meter="touches", native_quantity=dict(touches=hr["approvers"]),
+                                 contract_rate=self.p["human_touch_cost"], direct_cost=None, allocated_cost=hr["approvers"] * self.p["human_touch_cost"], currency=self.p.get("currency", "EUR"),
+                                 quantity_source="DERIVED", cost_evidence="COUNTERFACTUAL"))
         if acts: action, human = ("act" if eff == "ACT" else "act_notify"), None
         else:
             human = dict(role=hr["role"], approvers=hr["approvers"], when=hr["when"], reason=reason,
