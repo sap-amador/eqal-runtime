@@ -78,11 +78,13 @@ def render_workflow(w, title):
         cost_lbl = f"&euro;{s['cost']:,.2f} people" if s.get("people") else f"${s['cost']:.4f} model"
         tipmap = {"D": "Class D: deterministic rules, the checklist. Free, used first.", "S": "Class S: specialist tool that confirms one fact. Stub until connected.", "L": "Class L: small language model, the junior reviewer.", "F": "Class F: large language model, the senior reviewer, asked only when needed.", "M": "Class M: several independent models, the panel."}
         tp = next((tipmap[k] for k in tipmap if s['name'].endswith(" " + k)), "")
-        rows += f'''<tr><td class="stepname" {("data-tip=\"" + e(tp) + "\"") if tp else ""}><span class="dot" style="background:{s['colour']}"></span>{e(s['name'])}<small>{e(s['who'])}</small></td>
+        tipattr = ('data-tip="' + e(tp) + '"') if tp else ""
+        notes = "<br>".join(e(x) for x in s['notes'])
+        rows += f'''<tr><td class="stepname" {tipattr}><span class="dot" style="background:{s['colour']}"></span>{e(s['name'])}<small>{e(s['who'])}</small></td>
         <td class="num">{s['cases']:,}</td>
         <td><svg class="bar" viewBox="0 0 260 14">{bar(s['cost'], maxcost, COL['cost'])}</svg><small>{cost_lbl}</small></td>
         <td><svg class="bar" viewBox="0 0 260 14">{bar(s['ms'], maxms, COL['time'])}</svg><small>{s['ms']:.0f} ms</small></td>
-        <td><small>{'<br>'.join(e(x) for x in s['notes'])}</small></td></tr>'''
+        <td><small>{notes}</small></td></tr>'''
     comp = "".join(f'<tr><td>{e(k)}</td><td><svg class="bar" viewBox="0 0 260 14"><rect x="0" y="0" width="260" height="14" rx="2" fill="#E2E6EF"/><rect x="0" y="0" width="{260*v:.1f}" height="14" rx="2" fill="{COL["comp"] if v >= 0.999 else COL["risk"] if v >= 0.9 else COL["none"]}"/></svg></td><td class="num">{v:.1%}</td></tr>' for k, v in w["comp"])
     a = w["aut"]; tot = sum(a.values()) or 1
     autbar = "".join(f'<div style="width:{100*a[k]/tot:.2f}%;background:{c}" title="{k} {a[k]}"></div>' for k, c in (("NONE", COL["none"]), ("RECOMMEND", COL["rec"]), ("ACT_NOTIFY", COL["notify"]), ("ACT", COL["act"])))
