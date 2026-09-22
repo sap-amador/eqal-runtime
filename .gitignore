@@ -2,3 +2,7 @@
 __pycache__/
 *.db
 .env
+cases_*.jsonl
+ledger-*.json
+calibration*.json
+report-*.html
