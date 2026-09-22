@@ -2,7 +2,7 @@
 # Structure follows the provisional specification [0025]–[0031].
 # Sections marked FROZEN are fixed by the runtime and must be identical across packs.
 pack: AP
-version: "0.4"
+version: "0.4.1"
 currency: EUR
 human_touch_cost: 8.00
 
@@ -29,8 +29,8 @@ classification:
 
 # ---- risk lens ([0042]) ----------------------------------------------------
 risk_lens:
-  signals: [payee_bank_changed, vendor_contact_anomaly, first_invoice, just_below_threshold]
-  weights: {payee_bank_changed: 0.45, vendor_contact_anomaly: 0.40, first_invoice: 0.20, just_below_threshold: 0.20}
+  signals: [payee_bank_changed, vendor_contact_anomaly, first_invoice, just_below_threshold, possible_duplicate_same_day]
+  weights: {payee_bank_changed: 0.45, vendor_contact_anomaly: 0.40, first_invoice: 0.20, just_below_threshold: 0.20, possible_duplicate_same_day: 0.25}   # cannot demote alone; combined with another signal it does
   threshold: 0.60
   demote_to: RECOMMEND
 

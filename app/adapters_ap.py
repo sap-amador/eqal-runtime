@@ -30,17 +30,21 @@ class APDeterministic:
         return dict(variance=round(variance, 2), extra_lines=len(extra), qty_issue=qty_issue, within_tolerance=within, po_total=round(po_total, 2))
 
     def duplicate(self, inv):
-        """A duplicate is the same vendor invoice number, or the same vendor + amount + invoice date.
-        Recurring identical orders on different dates are legitimate and must not trip this."""
+        """Returns (true_duplicate, possible_same_day).
+        A TRUE duplicate is the same supplier with the same invoice number. Same supplier + same amount + same
+        date with a different invoice number is only a POSSIBLE duplicate: on real ledgers (councils paying a care
+        provider several invoices of the same fee on the same day) this is routine and legitimate, so it is a
+        risk-lens signal, not a verdict, and it must not be handed to a model as 'duplicate suspected'."""
         k1 = hashlib.sha256(json.dumps([inv["vendor_ref"], inv["invoice_ref"]]).encode()).hexdigest()
         k2 = hashlib.sha256(json.dumps([inv["vendor_ref"], inv["amount"], inv["date"]]).encode()).hexdigest()
-        dup = k1 in self.seen or k2 in self.seen
-        self.seen[k1] = inv["invoice_ref"]; self.seen[k2] = inv["invoice_ref"]; return dup
+        true_dup = k1 in self.seen; possible = (k2 in self.seen) and not true_dup
+        self.seen[k1] = inv["invoice_ref"]; self.seen[k2] = inv["invoice_ref"]
+        return true_dup, possible
 
     def build(self, case):
         docs = case["docs"]; inv = docs["invoice"]; m = self.match(docs)
         bank_changed = "bank_change_letter" in docs or (inv.get("payee_iban") != docs.get("vendor_iban_on_file", inv.get("payee_iban")))
-        dup = self.duplicate(inv)
+        dup, possible_dup = self.duplicate(inv)
         # classification by rules
         if bank_changed: cands, cconf = ["bank_detail_change"], 1.0
         elif m["within_tolerance"] and not m["extra_lines"] and not m["qty_issue"]: cands, cconf = ["clean_match"], 1.0
@@ -49,7 +53,7 @@ class APDeterministic:
         rule_pass = (cands == ["clean_match"]) and not dup
         signals = dict(payee_bank_changed=bank_changed, vendor_contact_anomaly=False, first_invoice=False, just_below_threshold=False,
                        adapter_version="ap-deterministic-v0.5.1",
-                       po_match_exact=m["within_tolerance"], master_data_complete=True, duplicate_suspected=dup,
+                       po_match_exact=m["within_tolerance"], master_data_complete=True, duplicate_suspected=dup, possible_duplicate_same_day=possible_dup,
                        rule_candidates=cands, rule_class_confidence=cconf, rule_pass=rule_pass, rule_confidence=0.998 if rule_pass else 0.5,
                        verified=False, verify_confidence=0.0, adapter_id="ap-deterministic-v0.5")
         if bank_changed:
@@ -62,7 +66,9 @@ class APDeterministic:
                                      lines=[dict(item=l["item"], qty=l["qty"], unit=l["unit"], unit_price=l["unit_price"]) for l in inv["lines"]]),
                         po=dict(ref=docs["po"]["po_ref"], date=docs["po"]["date"], terms=docs["po"]["terms"], lines=docs["po"]["lines"]),
                         goods_receipts=docs["goods_receipts"], contracted_price_list={l["item"]: pl.get(l["item"]) for l in inv["lines"]},
-                        three_way_match=m, duplicate_suspected=dup, variance=m["variance"])
+                        three_way_match=m, duplicate_suspected=dup,
+                        possible_duplicate_same_day=("same supplier, same amount and date, different invoice number — possible duplicate, distinct document" if possible_dup else False),
+                        variance=m["variance"])
         if bank_changed:
             letter = docs["bank_change_letter"]; hist = docs["vendor_history"]
             evidence["bank_change_request"] = dict(sender=letter["sender"], subject=letter["subject"], body=letter["body"], signed_by=letter["signed_by"],
