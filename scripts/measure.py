@@ -30,6 +30,13 @@ def main():
             if ex.code == 409: continue
             raise
         truth = case["truth"]; rec = (d.get("path") or [{}])[-1].get("verdict")
+        if truth is None:   # no admissible outcome: record the decision, append an outcome with correct=None (counts for routing, cost, agreement; excluded from accuracy)
+            call("POST", f"/v1/outcomes/{d['case_id']}", dict(kind="observed", value="unknown", correct=None, truth=None, realised_effect=0.0,
+                                                          human=(dict(touches=d["human"]["approvers"], decision="pending", override=False) if d["human"] else None),
+                                                          detail=dict(true_class=case["true_class"], resolution="UNKNOWN", provenance=case.get("provenance"))))
+            n += 1
+            if n % 50 == 0: print(f"{n} cases, {time.time()-t0:.0f}s", file=sys.stderr)
+            continue
         human = None
         if d["human"]:
             human = dict(touches=d["human"]["approvers"], decision="approve" if truth else "reject", override=(rec is not None and rec != truth))

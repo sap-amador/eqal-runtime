@@ -1,12 +1,10 @@
 | class | calls | failures | accuracy | tokens in/out | measured cost per call | latency |
 |---|---|---|---|---|---|---|
-| L | 352 | 0 | 100.0% | 573/62 | $0.00012 | 1414 ms |
-| D (rules; 0.50 = not decidable by rules) | 1526 | 0 | 99.4% | 0/0 | $0.00000 | 0 ms |
-| S (STUB until a verification service is connected) | 122 | 0 | 21.3% | 0/0 | $0.00000 | 0 ms |
-| F | 122 | 0 | 71.3% | 701/51 | $0.00043 | 2027 ms |
+| D (rules; 0.50 = not decidable by rules) | 492 | 0 | 51.2% | 0/0 | $0.00000 | 0 ms |
+| L | 447 | 0 | 54.8% | 669/56 | $0.00013 | 1441 ms |
+| F | 106 | 0 | 73.6% | 673/50 | $0.00041 | 2340 ms |
 
 Calibration (stated confidence bucket -> observed accuracy):
-- L: 0.95: 100% (n=352)
-- D: 0.95: 99% (n=1526)
-- S: 0.00: 21% (n=122)
-- F: 0.55: 65% (n=100), 0.95: 100% (n=22)
+- D: 0.50: 29% (n=339), 0.95: 100% (n=153)
+- L: 0.95: 55% (n=447)
+- F: 0.85: 76% (n=38), 0.95: 72% (n=68)

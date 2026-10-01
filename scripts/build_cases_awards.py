@@ -50,6 +50,8 @@ def main():
     ap.add_argument("--csv", required=True, nargs="+"); ap.add_argument("--jurisdiction", required=True, choices=["UK", "US", "SG", "EU"])
     ap.add_argument("--n", type=int, default=2000); ap.add_argument("--seed", type=int, default=11); ap.add_argument("--out", default="cases_awards.jsonl")
     ap.add_argument("--source", required=True); ap.add_argument("--licence", required=True); ap.add_argument("--dataset-version", default="")
+    ap.add_argument("--truth-mode", default="rule", choices=["rule", "none"], help="rule: outcome derived by a stated rule from the evidence; none: outcome NULL (routing, cost, agreement only). Random outcomes are not allowed.")
+    ap.add_argument("--amend-limit-pct", type=float, default=25.0); ap.add_argument("--var-tolerance-pct", type=float, default=10.0)
     for k in CANDS: ap.add_argument(f"--col-{k}")
     a = ap.parse_args(); rng = random.Random(a.seed)
     rows = []; detected = {}
@@ -76,30 +78,42 @@ def main():
     registration = dict(source=a.source, licence=a.licence, dataset_version=a.dataset_version, jurisdiction=a.jurisdiction, files=sorted(detected), columns=detected, seed=a.seed)
     while n < a.n:
         r = rng.choice(rows); share = by_pair[(r["buyer"], r["supplier"])] / by_buyer_total[r["buyer"]] if by_buyer_total[r["buyer"]] else 0
-        exc_real = False; legit = True; cls = None; note = r["desc"]
+        exc_real = False; legit = True; cls = None; note = r["desc"]; truth_rule = None
         proc_low = r["procedure"].lower()
-        if any(w in proc_low or w in note.lower() for w in EMERGENCY_WORDS): cls, exc_real = "emergency_procurement", True; legit = rng.random() < 0.85
-        elif r["bids"] == 1: cls, exc_real = "single_bid", True; legit = rng.random() < 0.7
-        elif r["modnum"] and r["modnum"] not in ("0", "00", "P00000"): cls, exc_real = "contract_amendment", True; legit = rng.random() < 0.8
-        elif r["status"] and re.search(r"debar|exclud|suspend", r["status"], re.I): cls, exc_real = "award_eligibility", True; legit = False
+        LAWFUL_SOLE = ["not available for competition", "follow on", "follow-on", "only one source", "sole source", "simplified acquisition", "set-aside", "set aside"]
+        if any(w in proc_low or w in note.lower() for w in EMERGENCY_WORDS):
+            cls, exc_real = "emergency_procurement", True; legit = None; truth_rule = "none: emergency legitimacy needs the file; always a person"
+        elif r["bids"] == 1:
+            cls, exc_real = "single_bid", True
+            if "full and open" in proc_low or any(w in proc_low for w in LAWFUL_SOLE): legit, truth_rule = True, "rule: one offer under a lawful procedure code (full and open / stated non-competitive basis)"
+            elif "not competed" in proc_low or "not available" not in proc_low and proc_low == "": legit, truth_rule = False, "rule: one offer with 'not competed' or no procedure basis"
+            else: legit, truth_rule = None, "none: procedure code does not state a basis"
+        elif r["modnum"] and r["modnum"] not in ("0", "00", "P00000"):
+            cls, exc_real = "contract_amendment", True
+            if r["estimate"] and r["estimate"] > 0: pct = abs(r["amount"]) / r["estimate"] * 100; legit, truth_rule = (pct <= a.amend_limit_pct), f"rule: modification obligation {pct:.1f}% of base-and-all-options vs limit {a.amend_limit_pct}%"
+            else: legit, truth_rule = None, "none: no base value to compare"
+        elif r["status"] and re.search(r"debar|exclud|suspend", r["status"], re.I):
+            cls, exc_real = "award_eligibility", True; legit, truth_rule = False, "rule: supplier status excluded/debarred/suspended"
         else:
             u = rng.random()
-            if u < 0.62: cls = "award_eligibility"; legit = True
+            if u < 0.62: cls = "award_eligibility"; legit, truth_rule = True, "rule: registered, no exclusion, no flags"
             elif u < 0.90:
                 cls = "price_vs_estimate"
-                if r["estimate"] and r["estimate"] > 0: exc_real = True; var = (r["amount"] - r["estimate"]) / r["estimate"]; legit = abs(var) <= 0.10 or rng.random() < 0.6
-                else: var = rng.choice([0.03, 0.08, 0.18, 0.35, -0.12]); legit = abs(var) <= 0.10
+                if r["estimate"] and r["estimate"] > 0: exc_real = True; var = (r["amount"] - r["estimate"]) / r["estimate"]; legit, truth_rule = (abs(var) * 100 <= a.var_tolerance_pct), f"rule: |variance| {abs(var)*100:.1f}% vs tolerance {a.var_tolerance_pct}%"
+                else: var = rng.choice([0.03, 0.08, 0.18, 0.35, -0.12]); legit, truth_rule = (abs(var) * 100 <= a.var_tolerance_pct), f"rule (constructed variance): |variance| vs tolerance {a.var_tolerance_pct}%"
                 note = note or ("Price reflects indexation clause in the framework." if legit else "")
-            else: cls = "supplier_concentration"; legit = share <= 0.4
+            else: cls = "supplier_concentration"; legit, truth_rule = (share <= 0.4), "rule: supplier share of buyer spend <= 40%"
+        if a.truth_mode == "none": legit, truth_rule = None, "none: outcomes withheld by --truth-mode none"
         est = r["estimate"] if (r["estimate"] and r["estimate"] > 0) else round(r["amount"] / (1 + (0 if cls != "price_vs_estimate" else rng.choice([0.03, 0.08, 0.18, 0.35, -0.12]))), 2)
         ref = f"{a.jurisdiction}{a.seed}-{n:05d}"
         docs = dict(award=dict(award_ref=ref, buyer=r["buyer"], supplier=r["supplier"], awarded_value=r["amount"], estimated_value=est, variance_pct=round((r["amount"] - est) / est * 100, 2) if est else None,
                                date=r["date"], description=r["desc"], procedure_type=r["procedure"], bid_count=r["bids"], modification=r["modnum"], supplier_status=r["status"], category=r["cpv"],
                                supplier_share_of_buyer_spend=round(share, 4), justification_text=note, currency={"UK": "GBP", "US": "USD", "SG": "SGD", "EU": "EUR"}[a.jurisdiction]))
-        code = f"R/{'R' if exc_real else 'C'}/C"
-        case = dict(case_id=f"H-{hashlib.sha256(ref.encode()).hexdigest()[:10]}", true_class=cls, truth=legit, resolution=("UPHELD" if legit else "CHALLENGED"), docs=docs,
-                    provenance=dict(dataset=registration, evidence_code=code, exception_from_real_field=exc_real, evidence_label=dict(inputs="REAL", exceptions=("REAL" if exc_real else "CONSTRUCTED"), outcomes="CONSTRUCTED")))
-        out.write(json.dumps(case) + "\n"); n += 1; counts[(cls, "real" if exc_real else "constructed")] += 1
+        code = f"R/{'R' if exc_real else 'C'}/{'C' if legit is not None else '-'}"
+        case = dict(case_id=f"H-{hashlib.sha256(ref.encode()).hexdigest()[:10]}", true_class=cls, truth=legit, resolution=("UPHELD" if legit else "CHALLENGED" if legit is not None else "UNKNOWN"), docs=docs,
+                    provenance=dict(dataset=registration, evidence_code=code, exception_from_real_field=exc_real, truth_rule=truth_rule,
+                                    evidence_label=dict(inputs="REAL", exceptions=("REAL" if exc_real else "CONSTRUCTED"), outcomes=("CONSTRUCTED (rule-derived)" if legit is not None else "NONE"))))
+        out.write(json.dumps(case) + "\n"); n += 1; counts[(cls, ("real" if exc_real else "constructed") + ("" if legit is not None else " / outcome none"))] += 1
     print(f"wrote {n} cases -> {a.out}", file=sys.stderr)
     for (c, k), v in sorted(counts.items()): print(f"  {c:24s} {k:11s} {v}", file=sys.stderr)
     print(f"Attribution: {a.source} - {a.licence}", file=sys.stderr)
