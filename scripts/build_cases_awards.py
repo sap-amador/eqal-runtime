@@ -27,7 +27,8 @@ CANDS = {
  "bids":     ["number_of_offers_received", "bids", "number_of_bids", "offers", "nb_tenders"],
  "procedure":["extent_competed", "procedure_type", "procedure", "top_type", "type_of_procedure", "award_procedure"],
  "modnum":   ["modification_number", "mod_number", "amendment", "modification"],
- "status":   ["award_status", "status", "tender_status", "supplier_status"],
+ "status":   ["award_status", "status", "tender_detail_status", "tender_status", "supplier_status"],
+ "ref":      ["tender_no", "award_id_piid", "notice_id", "ocid", "contract_id"],
  "cpv":      ["naics_code", "cpv", "product_or_service_code", "cpv_code"],
  "authority":["other_than_full_and_open_competition", "sole_source_authority", "justification", "non_competed_reason"],
 }
@@ -54,7 +55,7 @@ def main():
     ap.add_argument("--n", type=int, default=2000); ap.add_argument("--seed", type=int, default=11); ap.add_argument("--out", default="cases_awards.jsonl")
     ap.add_argument("--source", required=True); ap.add_argument("--licence", required=True); ap.add_argument("--dataset-version", default="")
     ap.add_argument("--truth-mode", default="rule", choices=["rule", "none"], help="rule: outcome derived by a stated rule from the evidence; none: outcome NULL (routing, cost, agreement only). Random outcomes are not allowed.")
-    ap.add_argument("--amend-limit-pct", type=float, default=25.0); ap.add_argument("--var-tolerance-pct", type=float, default=10.0)
+    ap.add_argument("--amend-limit-pct", type=float, default=25.0); ap.add_argument("--var-tolerance-pct", type=float, default=10.0); ap.add_argument("--sg-quotation-max", type=float, default=90000.0)
     for k in CANDS: ap.add_argument(f"--col-{k}")
     a = ap.parse_args(); rng = random.Random(a.seed)
     rows = []; detected = {}
@@ -67,10 +68,14 @@ def main():
             for r in rd:
                 amt = money(r.get(m["amount"]))
                 if amt is None or amt <= 0 or not (r.get(m["supplier"]) or "").strip(): continue
-                rows.append(dict(buyer=(r.get(m["buyer"]) or "unknown buyer").strip() if m["buyer"] else "unknown buyer", supplier=r[m["supplier"]].strip(), amount=amt,
+                ref_ = (r.get(m["ref"]) or "").strip() if m.get("ref") else ""
+                proc_ = (r.get(m["procedure"]) or "").strip() if m["procedure"] else ""
+                if not proc_ and a.jurisdiction == "SG" and ref_:   # GeBIZ encodes the procedure in the tender number
+                    proc_ = "quotation" if "ETQ" in ref_ else "tender" if "ETT" in ref_ else "unknown"
+                rows.append(dict(ref=ref_, buyer=(r.get(m["buyer"]) or "unknown buyer").strip() if m["buyer"] else "unknown buyer", supplier=r[m["supplier"]].strip(), amount=amt,
                                  estimate=money(r.get(m["estimate"])) if m["estimate"] else None, date=(r.get(m["date"]) or "").strip() if m["date"] else "",
                                  desc=(r.get(m["desc"]) or "").strip()[:160] if m["desc"] else "", bids=(money(r.get(m["bids"])) if m["bids"] else None),
-                                 procedure=(r.get(m["procedure"]) or "").strip() if m["procedure"] else "", modnum=(r.get(m["modnum"]) or "").strip() if m["modnum"] else "",
+                                 procedure=proc_, modnum=(r.get(m["modnum"]) or "").strip() if m["modnum"] else "",
                                  status=(r.get(m["status"]) or "").strip() if m["status"] else "", cpv=(r.get(m["cpv"]) or "").strip() if m["cpv"] else "", authority=(r.get(m["authority"]) or "").strip() if m["authority"] else "", file=Path(path).name))
     if not rows: sys.exit("no usable awards")
     by_buyer_total = collections.defaultdict(float); by_pair = collections.defaultdict(float)
@@ -100,10 +105,16 @@ def main():
             else: legit, truth_rule = None, "none: no base value, or base equals the modification's own obligation"
         elif r["status"] and re.search(r"debar|exclud|suspend", r["status"], re.I):
             cls, exc_real = "award_eligibility", True; legit, truth_rule = False, "rule: supplier status excluded/debarred/suspended"
+        elif a.jurisdiction == "SG" and r["procedure"] in ("quotation", "tender"):
+            qmax = float(a.sg_quotation_max)
+            if r["procedure"] == "quotation" and r["amount"] > qmax: cls, exc_real = "procedure_threshold", True; legit, truth_rule = False, f"rule: quotation procedure awarded above the quotation ceiling S${qmax:,.0f}"
+            elif r["status"] and "no suppliers" in r["status"].lower(): cls, exc_real = "market_failure", True; legit, truth_rule = None, "none: tender closed with no award; legitimacy needs the file"
+            elif share > 0.4: cls, exc_real = "supplier_concentration", True; legit, truth_rule = (share <= 0.4), "rule: supplier share of agency spend <= 40%"
+            else: cls, exc_real = "procedure_threshold", True; legit, truth_rule = True, "rule: procedure consistent with awarded value"
         else:
             u = rng.random()
             if u < 0.62: cls = "award_eligibility"; legit, truth_rule = True, "rule: registered, no exclusion, no flags"
-            elif u < 0.90:
+            elif u < 0.90 and (("estimate" in real_fields) or a.jurisdiction != "SG"):
                 cls = "price_vs_estimate"
                 if r["estimate"] and r["estimate"] > 0: exc_real = True; var = (r["amount"] - r["estimate"]) / r["estimate"]; legit, truth_rule = (abs(var) * 100 <= a.var_tolerance_pct), f"rule: |variance| {abs(var)*100:.1f}% vs tolerance {a.var_tolerance_pct}%"
                 else: var = rng.choice([0.03, 0.08, 0.18, 0.35, -0.12]); legit, truth_rule = (abs(var) * 100 <= a.var_tolerance_pct), f"rule (constructed variance): |variance| vs tolerance {a.var_tolerance_pct}%"
@@ -112,7 +123,7 @@ def main():
         if a.truth_mode == "none": legit, truth_rule = None, "none: outcomes withheld by --truth-mode none"
         est = r["estimate"] if (r["estimate"] and r["estimate"] > 0) else round(r["amount"] / (1 + (0 if cls != "price_vs_estimate" else rng.choice([0.03, 0.08, 0.18, 0.35, -0.12]))), 2)
         ref = f"{a.jurisdiction}{a.seed}-{n:05d}"
-        docs = dict(award=dict(award_ref=ref, buyer=r["buyer"], supplier=r["supplier"], awarded_value=r["amount"], estimated_value=est, variance_pct=round((r["amount"] - est) / est * 100, 2) if est else None,
+        docs = dict(award=dict(award_ref=ref, source_ref=r.get("ref", ""), buyer=r["buyer"], supplier=r["supplier"], awarded_value=r["amount"], estimated_value=est, variance_pct=round((r["amount"] - est) / est * 100, 2) if est else None,
                                date=r["date"], description=r["desc"], procedure_type=r["procedure"], bid_count=r["bids"], modification=r["modnum"], supplier_status=r["status"], category=r["cpv"],
                                supplier_share_of_buyer_spend=round(share, 4), justification_text=note, non_competition_authority=r["authority"], currency={"UK": "GBP", "US": "USD", "SG": "SGD", "EU": "EUR"}[a.jurisdiction]))
         code = f"R/{'R' if exc_real else 'C'}/{'C' if legit is not None else '-'}"

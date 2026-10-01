@@ -83,6 +83,26 @@ exception_classes:
     shadow_reference: L
     exception_source: real_field_where_present
 
+  procedure_threshold:
+    path: [D]                      # the procedure used must be consistent with the awarded value (quotation vs tender ceilings)
+    level_ceiling: 0
+    consequence: {fraction_of_line_cost: 1.0, default: 100000.00}
+    budget: {max_cost: 0.0, evidence: 0.99, max_latency_ms: 1000, autonomy: ACT_NOTIFY}
+    validation: {D: permitted, L: shadow_only}
+    human_rule: {role: procurement_officer, approvers: 1, when: breach}
+    evidence_required: [procedure_type, awarded_value, procedure_ceiling]
+    exception_source: real_field_derived
+
+  market_failure:
+    path: [D, L]                   # tender closed with no award; rules record it, a model may summarise, a person decides what next
+    level_ceiling: 1
+    consequence: 100000.00
+    budget: {max_cost: 0.001, evidence: 0.99, max_latency_ms: 20000, autonomy: NONE}
+    validation: {D: permitted, L: shadow_only}
+    human_rule: {role: procurement_officer, approvers: 1, when: always}
+    evidence_required: [procedure_type, description, status]
+    exception_source: real_field_where_present
+
   emergency_procurement:
     path: [D, F]                   # evidence gathered; never decided by the machine
     level_ceiling: H
@@ -123,6 +143,7 @@ jurisdictions:
     thresholds: {small_value_purchase: 6000, quotation_max: 90000, tender_above: 90000, verify: "GeBIZ / MOF procurement rules; re-check current values"}
     controls: {single_bid_justification_required_above: 90000, amendment_limit_pct: 30, debarment_list: "MOF debarment"}
     datasets: [gebiz_awards]
+    procedure_ceilings: {quotation: 90000, small_value_purchase: 6000}
   EU:
     currency: EUR
     identifiers: [vat_number, national_register_id]
