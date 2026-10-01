@@ -28,10 +28,10 @@ class ProcDeterministic:
         rule_verdict = None
         if cands == ["single_bid"]: rule_verdict = True if any(w in proc for w in ["competed under sap", "full and open", "not available for competition"]) else (bool(auth) if "not competed" in proc else None)
         if cands == ["price_vs_estimate"] and var is not None: rule_verdict = abs(var) <= float(self.t.get("variance_tolerance", 0.10))
-        if cands == ["contract_amendment"] and est: rule_verdict = (abs(amt) / est) <= float(self.t.get("amendment_limit", 0.25))
+        if cands == ["contract_amendment"] and est and abs(amt) < est * 0.999: rule_verdict = (abs(amt) / est) <= float(self.t.get("amendment_limit", 0.25))   # base == own obligation: not assessable
         rule_pass = (cands == ["award_eligibility"] and not debar) or (rule_verdict is not None)
         signals = dict(supplier_new_to_agency=False, supplier_concentration_high=share > 0.4, emergency_flag=emergency, amendment_large=amend, single_bid=single,
-                       estimate_missing=not est, debarment_hit=debar, rule_candidates=cands, rule_class_confidence=1.0, rule_pass=rule_pass,
+                       estimate_missing=not est, debarment_hit=debar, rule_candidates=cands, rule_class_confidence=1.0, rule_pass=rule_pass, rule_verdict=(rule_verdict if rule_verdict is not None else (not debar)),
                        rule_confidence=0.995 if rule_pass else 0.5, verified=not debar, verify_confidence=0.97 if not debar else 0.99, adapter_id="proc-deterministic-v0.1")
         flags = dict(any_flag=debar or emergency, above_threshold=amt > limit, share_above_limit=share > 0.4, amendment_above_limit=amend)
         evidence = dict(award=aw, variance_pct=(round(var * 100, 2) if var is not None else None), bid_count=aw.get("bid_count"), single_bid=single, amendment=amend,

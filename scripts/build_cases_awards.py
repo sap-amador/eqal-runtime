@@ -36,9 +36,11 @@ EMERGENCY_WORDS = ["emergency", "urgent", "negotiated without", "without prior p
 def pick(cols, key, override=None):
     if override: return override
     low = {c.lower().strip(): c for c in cols}
+    for cand in CANDS[key]:                      # exact match first (so extent_competed beats extent_competed_code)
+        if cand in low: return low[cand]
     for cand in CANDS[key]:
         for lc, orig in low.items():
-            if lc == cand or cand in lc: return orig
+            if cand in lc and not lc.endswith("_code"): return orig
     return None
 
 def money(x):
@@ -94,8 +96,8 @@ def main():
             else: legit, truth_rule = None, f"none: procedure code not recognised ({r['procedure']})"
         elif r["modnum"] and r["modnum"] not in ("0", "00", "P00000"):
             cls, exc_real = "contract_amendment", True
-            if r["estimate"] and r["estimate"] > 0: pct = abs(r["amount"]) / r["estimate"] * 100; legit, truth_rule = (pct <= a.amend_limit_pct), f"rule: modification obligation {pct:.1f}% of base-and-all-options vs limit {a.amend_limit_pct}%"
-            else: legit, truth_rule = None, "none: no base value to compare"
+            if r["estimate"] and r["estimate"] > 0 and abs(r["amount"]) < r["estimate"] * 0.999: pct = abs(r["amount"]) / r["estimate"] * 100; legit, truth_rule = (pct <= a.amend_limit_pct), f"rule: modification obligation {pct:.1f}% of base-and-all-options vs limit {a.amend_limit_pct}%"
+            else: legit, truth_rule = None, "none: no base value, or base equals the modification's own obligation"
         elif r["status"] and re.search(r"debar|exclud|suspend", r["status"], re.I):
             cls, exc_real = "award_eligibility", True; legit, truth_rule = False, "rule: supplier status excluded/debarred/suspended"
         else:
