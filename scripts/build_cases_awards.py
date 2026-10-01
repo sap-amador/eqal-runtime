@@ -67,7 +67,10 @@ def main():
             detected[Path(path).name] = {k: v for k, v in m.items() if v}
             for r in rd:
                 amt = money(r.get(m["amount"]))
-                if amt is None or amt <= 0 or not (r.get(m["supplier"]) or "").strip(): continue
+                st_ = (r.get(m["status"]) or "").strip().lower() if m["status"] else ""
+                no_award = ("no supplier" in st_) or ("no award" in st_) or ("cancel" in st_)
+                if amt is None or (amt <= 0 and not no_award) or (not (r.get(m["supplier"]) or "").strip() and not no_award): continue
+                if no_award: amt = amt or 0.0
                 ref_ = (r.get(m["ref"]) or "").strip() if m.get("ref") else ""
                 proc_ = (r.get(m["procedure"]) or "").strip() if m["procedure"] else ""
                 if not proc_ and a.jurisdiction == "SG" and ref_:   # GeBIZ encodes the procedure in the tender number
@@ -105,12 +108,13 @@ def main():
             else: legit, truth_rule = None, "none: no base value, or base equals the modification's own obligation"
         elif r["status"] and re.search(r"debar|exclud|suspend", r["status"], re.I):
             cls, exc_real = "award_eligibility", True; legit, truth_rule = False, "rule: supplier status excluded/debarred/suspended"
-        elif a.jurisdiction == "SG" and r["procedure"] in ("quotation", "tender"):
+        elif a.jurisdiction == "SG" and r["procedure"] in ("quotation", "tender", "unknown"):
             qmax = float(a.sg_quotation_max)
-            if r["procedure"] == "quotation" and r["amount"] > qmax: cls, exc_real = "procedure_threshold", True; legit, truth_rule = False, f"rule: quotation procedure awarded above the quotation ceiling S${qmax:,.0f}"
-            elif r["status"] and "no suppliers" in r["status"].lower(): cls, exc_real = "market_failure", True; legit, truth_rule = None, "none: tender closed with no award; legitimacy needs the file"
+            if r["status"] and ("no supplier" in r["status"].lower() or "no award" in r["status"].lower()): cls, exc_real = "market_failure", True; legit, truth_rule = None, "none: tender closed with no award; legitimacy needs the file"
+            elif r["procedure"] == "quotation" and r["amount"] > qmax: cls, exc_real = "procedure_threshold", True; legit, truth_rule = False, f"rule: quotation procedure awarded above the quotation ceiling S${qmax:,.0f}"
+            elif r["status"] and ("no supplier" in r["status"].lower() or "no award" in r["status"].lower()): cls, exc_real = "market_failure", True; legit, truth_rule = None, "none: tender closed with no award; legitimacy needs the file"
             elif share > 0.4: cls, exc_real = "supplier_concentration", True; legit, truth_rule = (share <= 0.4), "rule: supplier share of agency spend <= 40%"
-            else: cls, exc_real = "procedure_threshold", True; legit, truth_rule = True, "rule: procedure consistent with awarded value"
+            else: cls, exc_real = "award_eligibility", True; legit, truth_rule = True, "rule: procedure consistent with awarded value; no exclusion"
         else:
             u = rng.random()
             if u < 0.62: cls = "award_eligibility"; legit, truth_rule = True, "rule: registered, no exclusion, no flags"
