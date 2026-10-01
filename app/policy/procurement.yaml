@@ -1,0 +1,136 @@
+# EQAL Policy Pack — Procurement grammar v0.1 with jurisdiction variants (1 Oct 2026)
+# Sourcing / award decisions, NOT accounts payable. Same seven-part format; FROZEN sections identical to AP/SCM.
+# Select a jurisdiction with EQAL_JURISDICTION=UK|US|SG|EU; the runtime merges `jurisdictions.<X>` over the base.
+# All thresholds are pack parameters marked verify-before-use; record the source and date when verified.
+pack: PROC
+version: "0.1"
+currency: EUR
+human_touch_cost: 25.00          # procurement officer per touch; tenant-specific
+capability_type: document_judgement
+
+classes:                          # FROZEN
+  D: {name: deterministic,  cost: 0.000, latency_ms: 20}
+  S: {name: specialist,     cost: 0.010, latency_ms: 900}
+  L: {name: local model,    cost: 0.00014, latency_ms: 1200}
+  F: {name: frontier model, cost: 0.00047, latency_ms: 2000}
+  M: {name: multi-model,    cost: 0.0010,  latency_ms: 4000}
+autonomy_order: [NONE, RECOMMEND, ACT_NOTIFY, ACT]           # FROZEN
+level_ceiling_values: [0, 1, 2, 3, H]                        # FROZEN
+routing_rule: conservative                                   # FROZEN
+
+classification:
+  ladder: [D, L]
+  threshold: 0.95
+  validation: {D: permitted, L: permitted, F: not_permitted}
+
+risk_lens:
+  signals: [supplier_new_to_agency, supplier_concentration_high, emergency_flag, amendment_large, single_bid, estimate_missing, debarment_hit]
+  weights: {supplier_new_to_agency: 0.20, supplier_concentration_high: 0.25, emergency_flag: 0.45, amendment_large: 0.30, single_bid: 0.25, estimate_missing: 0.15, debarment_hit: 0.90}
+  threshold: 0.60
+  demote_to: RECOMMEND
+
+exception_classes:
+  award_eligibility:
+    path: [D, S]                   # D: supplier registered, identifiers valid; S: sanctions / debarment service
+    level_ceiling: 1
+    consequence: {fraction_of_line_cost: 1.0, default: 50000.00}
+    budget: {max_cost: 0.02, evidence: 0.99, max_latency_ms: 5000, autonomy: ACT_NOTIFY}
+    validation: {D: permitted, S: permitted}
+    human_rule: {role: procurement_officer, approvers: 1, when: any_flag}
+    evidence_required: [supplier_identifier, register_status, debarment_result, sanctions_result]
+    exception_source: real_field_where_present      # debarment / register fields exist in several datasets
+
+  price_vs_estimate:
+    path: [L, F]                   # rules compute variance to published estimate; L judges the justification text
+    level_ceiling: 2
+    consequence: {fraction_of_line_cost: 1.0, default: 100000.00}
+    budget: {max_cost: 0.002, evidence: 0.98, max_latency_ms: 30000, autonomy: RECOMMEND}
+    validation: {L: permitted, F: permitted}
+    human_rule: {role: procurement_officer, approvers: 1, when: budget_or_ceiling}
+    evidence_required: [estimated_value, awarded_value, variance_pct, procedure_type, justification_text, lot_count]
+    shadow_reference: L
+    shadow_above: true
+    exception_source: constructed_unless_estimate_present
+
+  single_bid:
+    path: [D, L]                   # D: bid count = 1 (real field in TED/Contracts Finder); L: is the justification plausible
+    level_ceiling: 1
+    consequence: {fraction_of_line_cost: 1.0, default: 100000.00}
+    budget: {max_cost: 0.001, evidence: 0.98, max_latency_ms: 20000, autonomy: RECOMMEND}
+    validation: {D: permitted, L: permitted, F: shadow_only}
+    human_rule: {role: procurement_officer, approvers: 1, when: above_threshold}
+    evidence_required: [bid_count, procedure_type, justification_text, awarded_value, market_notes]
+    exception_source: real_field_where_present
+
+  supplier_concentration:
+    path: [D]                      # share of agency spend to this supplier over the period; a risk signal, not a verdict
+    level_ceiling: 0
+    consequence: {fraction_of_line_cost: 0.5, default: 50000.00}
+    budget: {max_cost: 0.0, evidence: 0.99, max_latency_ms: 1000, autonomy: ACT_NOTIFY}
+    validation: {D: permitted}
+    human_rule: {role: category_manager, approvers: 1, when: share_above_limit}
+    evidence_required: [supplier_share_of_agency_spend, period, award_count]
+    exception_source: real_field_derived
+
+  contract_amendment:
+    path: [L, F]                   # D computes amendment % (real in USAspending modifications); L judges stated reason; F if large
+    level_ceiling: 2
+    consequence: {fraction_of_line_cost: 1.0, default: 200000.00}
+    budget: {max_cost: 0.003, evidence: 0.98, max_latency_ms: 30000, autonomy: RECOMMEND}
+    validation: {L: permitted, F: permitted}
+    human_rule: {role: contracting_officer, approvers: 1, when: amendment_above_limit}
+    evidence_required: [original_value, amended_value, amendment_pct, reason_text, modification_count]
+    shadow_reference: L
+    exception_source: real_field_where_present
+
+  emergency_procurement:
+    path: [D, F]                   # evidence gathered; never decided by the machine
+    level_ceiling: H
+    consequence: 500000.00
+    budget: {max_cost: null, evidence: 0.99, max_latency_ms: null, autonomy: NONE}
+    validation: {D: permitted, F: permitted}
+    human_rule: {role: head_of_procurement_and_legal, approvers: 2, when: always}
+    evidence_required: [emergency_flag, procedure_type, justification_text, awarded_value, supplier_history]
+    exception_source: real_field_where_present
+
+outcome_scoring:
+  sources: [award_upheld, award_challenged_or_cancelled, amendment_reversed, audit_finding]
+  maturity_days: 90
+  scoring: {upheld_no_finding: correct, challenged_or_finding: incorrect, unknown: constructed}
+  version: proc_outcome_v1
+
+# ---- jurisdiction variants: thresholds, identifiers, controls. VERIFY BEFORE USE; record source and date. ----
+jurisdictions:
+  UK:
+    currency: GBP
+    identifiers: [companies_house_number, vat_number, duns]
+    thresholds: {works: 5372609, supplies_services_central: 139688, supplies_services_subcentral: 214904, verify: "Procurement Act 2023 thresholds from 1 Jan 2024; re-check 2026 revision"}
+    controls: {single_bid_justification_required_above: 139688, amendment_limit_pct: 50, debarment_list: "UK debarment list (Procurement Act)"}
+    datasets: [contracts_finder_ocds]
+  US:
+    currency: USD
+    identifiers: [uei_sam, cage_code, ein]
+    thresholds: {simplified_acquisition: 250000, micro_purchase: 10000, verify: "FAR 2.101; check current inflation adjustment"}
+    controls: {single_bid_justification_required_above: 250000, amendment_limit_pct: 25, debarment_list: "SAM exclusions"}
+    datasets: [usaspending_transactions]
+  SG:
+    currency: SGD
+    identifiers: [uen]
+    thresholds: {small_value_purchase: 6000, quotation_max: 90000, tender_above: 90000, verify: "GeBIZ / MOF procurement rules; re-check current values"}
+    controls: {single_bid_justification_required_above: 90000, amendment_limit_pct: 30, debarment_list: "MOF debarment"}
+    datasets: [gebiz_awards]
+  EU:
+    currency: EUR
+    identifiers: [vat_number, national_register_id]
+    thresholds: {central_supplies_services: 143000, subcentral_supplies_services: 221000, works: 5538000, verify: "EU thresholds 2024-2025 (Regulation (EU) 2023/2495 et al.); re-check 2026"}
+    controls: {single_bid_justification_required_above: 143000, amendment_limit_pct: 50, debarment_list: "member-state exclusion grounds (Directive 2014/24/EU art. 57)"}
+    datasets: [ted_awards]
+
+pnl_metrics:
+  - awards reviewed; resolved by rules; judged by small model; escalated; handed to a person
+  - price-vs-estimate variances judged legitimate / not, with calibration against outcome definition
+  - single-bid awards above threshold and where they ended (person always)
+  - supplier concentration flags by agency
+  - amendments above limit and their stated reasons
+  - emergency procurements held for two approvers
+  - intelligence cost, specialist cost, people cost; cost per decision; evidence code on every row

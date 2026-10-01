@@ -11,6 +11,7 @@ Writes calibration.json and calibration.md. These replace the assumed constants 
 import argparse, json, os, sys, time, urllib.request, urllib.error, statistics as st
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.adapters_ap import APDeterministic
+from app.adapters_proc import ProcDeterministic
 URL, KEY = os.getenv("EQAL_URL", "http://localhost:8000"), os.getenv("EQAL_API_KEY", "demo-key")
 PRICE = {c: (float(os.getenv(f"EQAL_PRICE_{c}_IN", "0")), float(os.getenv(f"EQAL_PRICE_{c}_OUT", "0"))) for c in ("L", "F", "M")}
 def call(m, path, body=None):
@@ -18,11 +19,12 @@ def call(m, path, body=None):
     with urllib.request.urlopen(req, timeout=120) as r: return json.load(r)
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--cases", default="cases.jsonl"); ap.add_argument("--limit", type=int, default=0); ap.add_argument("--observe-only", action="store_true")
-    a = ap.parse_args(); ad = APDeterministic(); n = 0; t0 = time.time()
+    ap = argparse.ArgumentParser(); ap.add_argument("--cases", default="cases.jsonl"); ap.add_argument("--limit", type=int, default=0); ap.add_argument("--observe-only", action="store_true"); ap.add_argument("--adapter", default="ap", choices=["ap", "proc"])
+    a = ap.parse_args(); ad = APDeterministic() if a.adapter == "ap" else ProcDeterministic(json.loads(os.getenv("EQAL_THRESHOLDS", "{}"))); n = 0; t0 = time.time()
     for line in open(a.cases):
         if a.limit and n >= a.limit: break
         case = json.loads(line); body = ad.build(case); body["observe_only"] = a.observe_only
+        if case.get("provenance"): body["input_refs"]["provenance"] = case["provenance"]
         try: d = call("POST", "/v1/decide", body)
         except urllib.error.HTTPError as ex:
             if ex.code == 409: continue

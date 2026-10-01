@@ -23,6 +23,10 @@ AUT = ["NONE", "RECOMMEND", "ACT_NOTIFY", "ACT"]
 def load_policy(pack: str) -> dict:
     p = yaml.safe_load((POLICY_DIR / f"{pack}.yaml").read_text())
     p.setdefault("lifecycle", "ACTIVE")
+    j = os.getenv("EQAL_JURISDICTION")
+    if j and p.get("jurisdictions", {}).get(j):   # merge the jurisdiction variant over non-frozen fields; version carries the jurisdiction
+        v = p["jurisdictions"][j]; p["currency"] = v.get("currency", p.get("currency")); p["jurisdiction"] = j
+        p["thresholds"] = v.get("thresholds", {}); p["controls"] = v.get("controls", {}); p["version"] = f"{p['version']}-{j}"
     return p
 
 @dataclass

@@ -6,7 +6,9 @@ app = FastAPI()
 async def chat(req: Request):
     body = await req.json(); txt = body["messages"][-1]["content"]; rng = random.Random(hash(txt) & 0xffff)
     ev = json.loads(txt.split("do not assume anything beyond it):\n", 1)[1].split("\nAnswer with a single JSON", 1)[0])
-    if "bank_change_request" in ev:
+    if "award" in ev:
+        a=ev["award"]; v=ev.get("variance_pct") or 0; legit = abs(v)<=10 or "indexation" in (ev.get("justification_text","").lower()); approve = legit if rng.random()<0.95 else not legit; conf=0.93
+    elif "bank_change_request" in ev:
         b = ev["bank_change_request"]; bad = (b["sender"] != b["contact_on_file"]) + (not b["letterhead_matches_vendor"]) + (b["new_account_country"] != b["previous_account_country"]) + ("urgent" in b["body"].lower() or "reply" in b["body"].lower() or "do not call" in b["body"].lower())
         approve = bad == 0 and rng.random() < 0.97 or (bad == 1 and rng.random() < 0.5); conf = 0.9 if bad != 1 else 0.7
     else:
