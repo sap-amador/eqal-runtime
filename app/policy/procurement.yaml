@@ -160,6 +160,10 @@ jurisdictions:
     thresholds: {central_supplies_services: 143000, subcentral_supplies_services: 221000, works: 5538000, verify: "EU thresholds 2024-2025 (Regulation (EU) 2023/2495 et al.); re-check 2026"}
     controls: {single_bid_justification_required_above: 143000, amendment_limit_pct: 50, debarment_list: "member-state exclusion grounds (Directive 2014/24/EU art. 57)"}
     datasets: [ted_awards]
+    class_overrides:               # Evidence Library finding, 1 Oct 2026 (TED smoke): numeric classes are rule classes here too; models shadow-only. Direct awards keep model judgement.
+      price_vs_estimate:  {path: [D, L], level_ceiling: 1, validation: {D: permitted, L: shadow_only, F: shadow_only}, budget: {max_cost: 0.0, evidence: 0.98, max_latency_ms: 5000, autonomy: RECOMMEND}}
+      contract_amendment: {path: [D, L], level_ceiling: 1, validation: {D: permitted, L: shadow_only, F: shadow_only}, budget: {max_cost: 0.0, evidence: 0.98, max_latency_ms: 5000, autonomy: RECOMMEND}}
+      single_bid:         {path: [D, L], level_ceiling: 1, validation: {D: permitted, L: shadow_only, F: not_permitted}, budget: {max_cost: 0.0, evidence: 0.98, max_latency_ms: 5000, autonomy: RECOMMEND}}
 
 pnl_metrics:
   - awards reviewed; resolved by rules; judged by small model; escalated; handed to a person
