@@ -103,6 +103,16 @@ exception_classes:
     evidence_required: [procedure_type, description, status]
     exception_source: real_field_where_present
 
+  direct_award:
+    path: [D, L, F]                # negotiated without prior call: rules record the basis; the small model reads the justification; frontier if short; a person decides
+    level_ceiling: 2
+    consequence: {fraction_of_line_cost: 1.0, default: 200000.00}
+    budget: {max_cost: 0.003, evidence: 0.98, max_latency_ms: 30000, autonomy: RECOMMEND}
+    validation: {D: permitted, L: permitted, F: permitted}
+    human_rule: {role: procurement_officer, approvers: 1, when: always}
+    evidence_required: [procedure_type, justification_text, awarded_value, estimated_value, supplier, cpv]
+    exception_source: real_field_where_present
+
   emergency_procurement:
     path: [D, F]                   # evidence gathered; never decided by the machine
     level_ceiling: H

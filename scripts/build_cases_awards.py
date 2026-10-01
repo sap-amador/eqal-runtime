@@ -20,17 +20,19 @@ from pathlib import Path
 CANDS = {
  "buyer":    ["awarding_agency_name", "agency", "buyer", "contracting_authority", "ca_name", "buyer name", "authority", "awarding agency"],
  "supplier": ["recipient_name", "supplier_name", "supplier", "awardee", "win_name", "winner", "vendor", "contractor"],
- "amount":   ["federal_action_obligation", "total_obligated_amount", "awarded_amt", "awarded amount", "award_value", "value_euro_fin_1", "award value", "contract value", "amount", "value"],
+ "amount":   ["federal_action_obligation", "total_obligated_amount", "awarded_amt", "awarded_amount", "awarded amount", "award_value", "value_euro_fin_1", "award value", "contract value", "amount", "value"],
  "estimate": ["base_and_all_options_value", "estimated_value", "value_euro", "estimated value", "budget", "estimated_amt"],
  "date":     ["action_date", "award_date", "date_of_dispatch", "award date", "awarded_date", "published date", "date"],
  "desc":     ["award_description", "tender_description", "description", "title", "object", "tender_no"],
  "bids":     ["number_of_offers_received", "bids", "number_of_bids", "offers", "nb_tenders"],
  "procedure":["extent_competed", "procedure_type", "procedure", "top_type", "type_of_procedure", "award_procedure"],
  "modnum":   ["modification_number", "mod_number", "amendment", "modification"],
- "status":   ["award_status", "status", "tender_detail_status", "tender_status", "supplier_status"],
+ "status":   ["award_status", "status", "result_code", "tender_detail_status", "tender_status", "supplier_status"],
  "ref":      ["tender_no", "award_id_piid", "notice_id", "ocid", "contract_id"],
+ "bidsalt":  ["bids"],
  "cpv":      ["naics_code", "cpv", "product_or_service_code", "cpv_code"],
  "authority":["other_than_full_and_open_competition", "sole_source_authority", "justification", "non_competed_reason"],
+ "currency": ["currency", "currency_code"],
 }
 EMERGENCY_WORDS = ["emergency", "urgent", "negotiated without", "without prior publication", "sole source", "only one source", "unusual and compelling"]
 
@@ -68,9 +70,9 @@ def main():
             for r in rd:
                 amt = money(r.get(m["amount"]))
                 st_ = (r.get(m["status"]) or "").strip().lower() if m["status"] else ""
-                no_award = ("no supplier" in st_) or ("no award" in st_) or ("cancel" in st_)
-                if amt is None or (amt <= 0 and not no_award) or (not (r.get(m["supplier"]) or "").strip() and not no_award): continue
+                no_award = ("no supplier" in st_) or ("no award" in st_) or ("cancel" in st_) or ("clos-nw" in st_) or ("clos-nw" in (r.get("result_code") or "").lower())
                 if no_award: amt = amt or 0.0
+                if amt is None or (amt <= 0 and not no_award) or (not (r.get(m["supplier"]) or "").strip() and not no_award): continue
                 ref_ = (r.get(m["ref"]) or "").strip() if m.get("ref") else ""
                 proc_ = (r.get(m["procedure"]) or "").strip() if m["procedure"] else ""
                 if not proc_ and a.jurisdiction == "SG" and ref_:   # GeBIZ encodes the procedure in the tender number
@@ -108,6 +110,10 @@ def main():
             else: legit, truth_rule = None, "none: no base value, or base equals the modification's own obligation"
         elif r["status"] and re.search(r"debar|exclud|suspend", r["status"], re.I):
             cls, exc_real = "award_eligibility", True; legit, truth_rule = False, "rule: supplier status excluded/debarred/suspended"
+        elif a.jurisdiction == "EU" and (("clos-nw" in (r["status"] or "").lower()) or ("no winner" in (r["status"] or "").lower())):
+            cls, exc_real = "market_failure", True; legit, truth_rule = None, "none: procedure closed with no winner (TED result code); a person decides what next"
+        elif a.jurisdiction == "EU" and r["procedure"] in ("neg-wo-call", "neg-w-call-sin", "direct"):
+            cls, exc_real = "direct_award", True; legit, truth_rule = None, "none: negotiated without prior call; the justification text is real, its legitimacy needs the file - model reads, person decides"
         elif a.jurisdiction == "SG" and r["procedure"] in ("quotation", "tender", "unknown"):
             qmax = float(a.sg_quotation_max)
             if r["status"] and ("no supplier" in r["status"].lower() or "no award" in r["status"].lower()): cls, exc_real = "market_failure", True; legit, truth_rule = None, "none: tender closed with no award; legitimacy needs the file"

@@ -19,7 +19,8 @@ class ProcDeterministic:
         proc_l = (aw.get("procedure_type") or "").lower(); ceilings = self.t.get("procedure_ceilings", {}); status = (aw.get("supplier_status") or aw.get("status") or "").lower()
         if emergency: cands = ["emergency_procurement"]
         elif proc_l == "quotation" and ceilings.get("quotation") and amt > float(ceilings["quotation"]): cands = ["procedure_threshold"]
-        elif "no supplier" in status or "no award" in status: cands = ["market_failure"]
+        elif "no supplier" in status or "no award" in status or "clos-nw" in status: cands = ["market_failure"]
+        elif proc_l in ("neg-wo-call", "neg-w-call-sin", "direct"): cands = ["direct_award"]
         elif debar: cands = ["award_eligibility"]
         elif single: cands = ["single_bid"]
         elif amend: cands = ["contract_amendment"]
