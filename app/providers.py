@@ -84,7 +84,7 @@ class GatewayProvider:
         self.region = os.getenv("EQAL_PROVIDER_REGION", "eu")
     def invoke(self, icls, cls, case):
         s = case.signals
-        if icls == "D": return Invocation(verdict=bool(s.get("rule_pass", True)), confidence=float(s.get("rule_confidence", 0.998)), adapter_id=s.get("adapter_id", "adapter-D"))
+        if icls == "D": return Invocation(verdict=bool(s.get("rule_verdict", s.get("rule_pass", True))), confidence=float(s.get("rule_confidence", 0.998)), adapter_id=s.get("adapter_id", "adapter-D"))
         if icls == "S": return Invocation(verdict=bool(s.get("verified", False)), confidence=float(s.get("verify_confidence", 0.97)), adapter_id=s.get("adapter_id", "adapter-S"))
         prompt = PROMPT.format(task=PROMPTS.get(cls, PROMPTS["_default"]), cls=cls, evidence=json.dumps(case.input_refs, indent=1))
         body = {"model": self.models[icls], "temperature": 0, "response_format": {"type": "json_object"},

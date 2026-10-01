@@ -58,18 +58,18 @@ def main():
             if s["outcome_code"] != "OK": c["fail"] += 1; c.setdefault("fail_reasons", {}).setdefault(f"{s['outcome_code']}: {s.get('reason','')[:80]}", 0); c["fail_reasons"][f"{s['outcome_code']}: {s.get('reason','')[:80]}"] += 1; continue
             c["n"] += 1; c["tin"].append(s.get("tokens_in", 0)); c["tout"].append(s.get("tokens_out", 0)); c["ms"].append(s.get("elapsed_ms", 0))
             if truth is not None:
-                right = s["verdict"] == truth; c["ok"] += right
+                c["judged"] = c.get("judged", 0) + 1; right = s["verdict"] == truth; c["ok"] += right
                 b = c["buckets"].setdefault(f"{int(s['confidence']*20)/20:.2f}", [0, 0]); b[0] += 1; b[1] += right
     out = {}
     for cls, c in cal.items():
         pin, pout = PRICE.get(cls, (0, 0)); mtin = st.mean(c["tin"]) if c["tin"] else 0; mtout = st.mean(c["tout"]) if c["tout"] else 0
-        out[cls] = dict(calls=c["n"], failures=c["fail"], accuracy=(c["ok"] / c["n"]) if c["n"] else None, mean_tokens_in=round(mtin), mean_tokens_out=round(mtout),
+        out[cls] = dict(calls=c["n"], judged=c.get("judged", 0), failures=c["fail"], accuracy=(c["ok"] / c["judged"]) if c.get("judged") else None, mean_tokens_in=round(mtin), mean_tokens_out=round(mtout),
                         measured_cost_usd=round((mtin * pin + mtout * pout) / 1e6, 6), mean_latency_ms=round(st.mean(c["ms"])) if c["ms"] else None,
                         calibration={k: dict(n=v[0], accuracy=round(v[1] / v[0], 3)) for k, v in sorted(c["buckets"].items())})
     json.dump(out, open("calibration.json", "w"), indent=1)
-    md = ["| class | calls | failures | accuracy | tokens in/out | measured cost per call | latency |", "|---|---|---|---|---|---|---|"]
+    md = ["| class | calls | judged | failures | accuracy (judged) | tokens in/out | measured cost per call | latency |", "|---|---|---|---|---|---|---|---|"]
     NOTE = {"D": " (rules; 0.50 = not decidable by rules)", "S": " (STUB until a verification service is connected)"}
-    for cls, c in out.items(): md.append(f"| {cls}{NOTE.get(cls, '')} | {c['calls']} | {c['failures']} | {'' if c['accuracy'] is None else format(c['accuracy'], '.1%')} | {c['mean_tokens_in']}/{c['mean_tokens_out']} | ${c['measured_cost_usd']:.5f} | {c['mean_latency_ms']} ms |")
+    for cls, c in out.items(): md.append(f"| {cls}{NOTE.get(cls, '')} | {c['calls']} | {c['judged']} | {c['failures']} | {'' if c['accuracy'] is None else format(c['accuracy'], '.1%')} | {c['mean_tokens_in']}/{c['mean_tokens_out']} | ${c['measured_cost_usd']:.5f} | {c['mean_latency_ms']} ms |")
     for cls, c in cal.items():
         if c.get("fail_reasons"): md.append(f"\nFailures for {cls}: " + "; ".join(f"{k} (x{v})" for k, v in c["fail_reasons"].items()))
     md.append("\nCalibration (stated confidence bucket -> observed accuracy):")

@@ -23,7 +23,13 @@ class ProcDeterministic:
         elif var is not None and abs(var) > 0.10: cands = ["price_vs_estimate"]
         elif share > 0.4: cands = ["supplier_concentration"]
         else: cands = ["award_eligibility"]
-        rule_pass = cands == ["award_eligibility"] and not debar
+        # rule-decidable exception classes (US finding): single bid with a competed/statutory code or a stated authority; variance within tolerance; amendment within limit
+        auth = aw.get("non_competition_authority") or ""; proc = (aw.get("procedure_type") or "").lower()
+        rule_verdict = None
+        if cands == ["single_bid"]: rule_verdict = True if any(w in proc for w in ["competed under sap", "full and open", "not available for competition"]) else (bool(auth) if "not competed" in proc else None)
+        if cands == ["price_vs_estimate"] and var is not None: rule_verdict = abs(var) <= float(self.t.get("variance_tolerance", 0.10))
+        if cands == ["contract_amendment"] and est: rule_verdict = (abs(amt) / est) <= float(self.t.get("amendment_limit", 0.25))
+        rule_pass = (cands == ["award_eligibility"] and not debar) or (rule_verdict is not None)
         signals = dict(supplier_new_to_agency=False, supplier_concentration_high=share > 0.4, emergency_flag=emergency, amendment_large=amend, single_bid=single,
                        estimate_missing=not est, debarment_hit=debar, rule_candidates=cands, rule_class_confidence=1.0, rule_pass=rule_pass,
                        rule_confidence=0.995 if rule_pass else 0.5, verified=not debar, verify_confidence=0.97 if not debar else 0.99, adapter_id="proc-deterministic-v0.1")

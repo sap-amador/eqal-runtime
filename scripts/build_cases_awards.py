@@ -29,6 +29,7 @@ CANDS = {
  "modnum":   ["modification_number", "mod_number", "amendment", "modification"],
  "status":   ["award_status", "status", "tender_status", "supplier_status"],
  "cpv":      ["naics_code", "cpv", "product_or_service_code", "cpv_code"],
+ "authority":["other_than_full_and_open_competition", "sole_source_authority", "justification", "non_competed_reason"],
 }
 EMERGENCY_WORDS = ["emergency", "urgent", "negotiated without", "without prior publication", "sole source", "only one source", "unusual and compelling"]
 
@@ -68,7 +69,7 @@ def main():
                                  estimate=money(r.get(m["estimate"])) if m["estimate"] else None, date=(r.get(m["date"]) or "").strip() if m["date"] else "",
                                  desc=(r.get(m["desc"]) or "").strip()[:160] if m["desc"] else "", bids=(money(r.get(m["bids"])) if m["bids"] else None),
                                  procedure=(r.get(m["procedure"]) or "").strip() if m["procedure"] else "", modnum=(r.get(m["modnum"]) or "").strip() if m["modnum"] else "",
-                                 status=(r.get(m["status"]) or "").strip() if m["status"] else "", cpv=(r.get(m["cpv"]) or "").strip() if m["cpv"] else "", file=Path(path).name))
+                                 status=(r.get(m["status"]) or "").strip() if m["status"] else "", cpv=(r.get(m["cpv"]) or "").strip() if m["cpv"] else "", authority=(r.get(m["authority"]) or "").strip() if m["authority"] else "", file=Path(path).name))
     if not rows: sys.exit("no usable awards")
     by_buyer_total = collections.defaultdict(float); by_pair = collections.defaultdict(float)
     for r in rows: by_buyer_total[r["buyer"]] += r["amount"]; by_pair[(r["buyer"], r["supplier"])] += r["amount"]
@@ -85,9 +86,12 @@ def main():
             cls, exc_real = "emergency_procurement", True; legit = None; truth_rule = "none: emergency legitimacy needs the file; always a person"
         elif r["bids"] == 1:
             cls, exc_real = "single_bid", True
-            if "full and open" in proc_low or any(w in proc_low for w in LAWFUL_SOLE): legit, truth_rule = True, "rule: one offer under a lawful procedure code (full and open / stated non-competitive basis)"
-            elif "not competed" in proc_low or "not available" not in proc_low and proc_low == "": legit, truth_rule = False, "rule: one offer with 'not competed' or no procedure basis"
-            else: legit, truth_rule = None, "none: procedure code does not state a basis"
+            if any(w in proc_low for w in ["competed under sap", "full and open", "not available for competition"]):
+                legit, truth_rule = True, f"rule: one offer under a competed or statutory procedure code ({r['procedure']})"
+            elif "not competed" in proc_low:
+                if r["authority"]: legit, truth_rule = True, f"rule: not competed with a stated authority ({r['authority']})"
+                else: legit, truth_rule = False, "rule: not competed and no authority cited"
+            else: legit, truth_rule = None, f"none: procedure code not recognised ({r['procedure']})"
         elif r["modnum"] and r["modnum"] not in ("0", "00", "P00000"):
             cls, exc_real = "contract_amendment", True
             if r["estimate"] and r["estimate"] > 0: pct = abs(r["amount"]) / r["estimate"] * 100; legit, truth_rule = (pct <= a.amend_limit_pct), f"rule: modification obligation {pct:.1f}% of base-and-all-options vs limit {a.amend_limit_pct}%"
@@ -108,7 +112,7 @@ def main():
         ref = f"{a.jurisdiction}{a.seed}-{n:05d}"
         docs = dict(award=dict(award_ref=ref, buyer=r["buyer"], supplier=r["supplier"], awarded_value=r["amount"], estimated_value=est, variance_pct=round((r["amount"] - est) / est * 100, 2) if est else None,
                                date=r["date"], description=r["desc"], procedure_type=r["procedure"], bid_count=r["bids"], modification=r["modnum"], supplier_status=r["status"], category=r["cpv"],
-                               supplier_share_of_buyer_spend=round(share, 4), justification_text=note, currency={"UK": "GBP", "US": "USD", "SG": "SGD", "EU": "EUR"}[a.jurisdiction]))
+                               supplier_share_of_buyer_spend=round(share, 4), justification_text=note, non_competition_authority=r["authority"], currency={"UK": "GBP", "US": "USD", "SG": "SGD", "EU": "EUR"}[a.jurisdiction]))
         code = f"R/{'R' if exc_real else 'C'}/{'C' if legit is not None else '-'}"
         case = dict(case_id=f"H-{hashlib.sha256(ref.encode()).hexdigest()[:10]}", true_class=cls, truth=legit, resolution=("UPHELD" if legit else "CHALLENGED" if legit is not None else "UNKNOWN"), docs=docs,
                     provenance=dict(dataset=registration, evidence_code=code, exception_from_real_field=exc_real, truth_rule=truth_rule,

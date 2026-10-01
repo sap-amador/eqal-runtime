@@ -27,6 +27,8 @@ def load_policy(pack: str) -> dict:
     if j and p.get("jurisdictions", {}).get(j):   # merge the jurisdiction variant over non-frozen fields; version carries the jurisdiction
         v = p["jurisdictions"][j]; p["currency"] = v.get("currency", p.get("currency")); p["jurisdiction"] = j
         p["thresholds"] = v.get("thresholds", {}); p["controls"] = v.get("controls", {}); p["version"] = f"{p['version']}-{j}"
+        for cls, ov in (v.get("class_overrides") or {}).items():   # a jurisdiction may narrow a class (path, validation, ceiling); never the frozen sections
+            if cls in p["exception_classes"]: p["exception_classes"][cls].update(ov)
     return p
 
 @dataclass
@@ -161,7 +163,7 @@ class Runtime:
         # shadow ABOVE: the next eligible class after the one that decided; run and stored, never used. Off by default (a call per case);
         # enable per class (shadow_above: true) or globally with EQAL_SHADOW_ABOVE=1 on measurement runs. Needed for under-intelligence (UIR).
         if not observe_only and path and reason == "threshold" and (pol.get("shadow_above") or os.getenv("EQAL_SHADOW_ABOVE") == "1"):
-            nxt = [c for c in pol["path"][pol["path"].index(path[-1]["cls"]) + 1:] if pol.get("validation", {}).get(c, "permitted") == "permitted"]
+            nxt = [c for c in pol["path"][pol["path"].index(path[-1]["cls"]) + 1:] if pol.get("validation", {}).get(c, "permitted") in ("permitted", "shadow_only")]
             if nxt:
                 r2 = self.prov.invoke(nxt[0], k, case); sp2 = self.C[nxt[0]]
                 shadows.append(dict(role="shadow", position="above", cls=nxt[0], verdict=r2.verdict, confidence=round(r2.confidence, 4), outcome_code=r2.outcome_code, cost=sp2["cost"]))

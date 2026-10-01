@@ -113,6 +113,10 @@ jurisdictions:
     thresholds: {simplified_acquisition: 250000, micro_purchase: 10000, verify: "FAR 2.101; check current inflation adjustment"}
     controls: {single_bid_justification_required_above: 250000, amendment_limit_pct: 25, debarment_list: "SAM exclusions"}
     datasets: [usaspending_transactions]
+    class_overrides:               # Evidence Library finding, 1 Oct 2026 (USDA FY26): every exception type USAspending can express is decidable by rules.
+      price_vs_estimate:  {path: [D, L], level_ceiling: 1, validation: {D: permitted, L: shadow_only, F: shadow_only}, budget: {max_cost: 0.0, evidence: 0.98, max_latency_ms: 5000, autonomy: RECOMMEND}}
+      contract_amendment: {path: [D, L], level_ceiling: 1, validation: {D: permitted, L: shadow_only, F: shadow_only}, budget: {max_cost: 0.0, evidence: 0.98, max_latency_ms: 5000, autonomy: RECOMMEND}}
+      single_bid:         {path: [D, L], level_ceiling: 1, validation: {D: permitted, L: shadow_only, F: not_permitted}, budget: {max_cost: 0.0, evidence: 0.98, max_latency_ms: 5000, autonomy: RECOMMEND}}
   SG:
     currency: SGD
     identifiers: [uen]
