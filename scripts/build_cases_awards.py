@@ -98,8 +98,8 @@ def main():
             cls, exc_real = "emergency_procurement", True; legit = None; truth_rule = "none: emergency legitimacy needs the file; always a person"
         elif r["bids"] == 1:
             cls, exc_real = "single_bid", True
-            if any(w in proc_low for w in ["competed under sap", "full and open", "not available for competition"]):
-                legit, truth_rule = True, f"rule: one offer under a competed or statutory procedure code ({r['procedure']})"
+            if any(w in proc_low for w in ["competed under sap", "full and open", "not available for competition"]) or proc_low in ("open", "restricted", "comp-dial", "comp-tend", "innovation", "neg-w-call"):
+                legit, truth_rule = True, f"rule: one offer under a competed or statutory procedure ({r['procedure']}) - lawful; competition health is a risk signal above the value threshold"
             elif "not competed" in proc_low:
                 if r["authority"]: legit, truth_rule = True, f"rule: not competed with a stated authority ({r['authority']})"
                 else: legit, truth_rule = False, "rule: not competed and no authority cited"

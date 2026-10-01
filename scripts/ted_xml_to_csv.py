@@ -58,7 +58,7 @@ def parse(path):
                 if n == "ID" and sub.attrib.get("schemeName") == "tender" and text(sub): tid = text(sub)
                 if n == "PayableAmount" and text(sub): amt = text(sub); cur = sub.attrib.get("currencyID", cur)
                 if n == "ID" and sub.attrib.get("schemeName") == "tendering-party" and text(sub): party = text(sub)
-            if tid: tenders[tid] = dict(amount=amt, currency=cur, party=party)
+            if tid and (party or amt) and not (tenders.get(tid, {}).get("party") and not party): tenders[tid] = dict(amount=amt, currency=cur, party=party)
     parties = {}
     for el in root.iter():
         if L(el.tag) == "TenderingParty":
@@ -67,23 +67,32 @@ def parse(path):
                 n = L(sub.tag)
                 if n == "ID" and sub.attrib.get("schemeName") == "tendering-party" and text(sub): pid = text(sub)
                 if n == "ID" and sub.attrib.get("schemeName", "").startswith("organization") and text(sub): org = text(sub)
-            if pid: parties[pid] = org
+            if pid and org: parties[pid] = org
     rows = []
     for el in root.iter():
         if L(el.tag) != "LotResult": continue
-        lot = ""; result = ""; bids = ""; tid = ""
+        lot = ""; result = ""; bids = ""; tid = ""; fw_re = ""; fw_max = ""; fw_cur = ""
+        for stat in el.iter():
+            if L(stat.tag) == "ReceivedSubmissionsStatistics":
+                code = ""; num = ""
+                for s2 in stat.iter():
+                    if L(s2.tag) == "StatisticsCode": code = text(s2)
+                    if L(s2.tag) == "StatisticsNumeric": num = text(s2)
+                if code == "tenders" and num: bids = num
         for sub in el.iter():
             n = L(sub.tag)
             if n == "ID" and sub.attrib.get("schemeName") == "Lot" and text(sub): lot = text(sub)
             if n == "TenderResultCode" and text(sub): result = text(sub)
-            if n == "ReceivedTenderQuantity" and text(sub) and not bids: bids = text(sub)
             if n == "ID" and sub.attrib.get("schemeName") == "tender" and text(sub): tid = text(sub)
+            if n == "ReestimatedValueAmount" and text(sub): fw_re = text(sub); fw_cur = sub.attrib.get("currencyID", fw_cur)
+            if n == "MaximumValueAmount" and text(sub): fw_max = text(sub); fw_cur = sub.attrib.get("currencyID", fw_cur)
         t = tenders.get(tid, {}); supplier = orgs.get(parties.get(t.get("party", ""), ""), "")
+        amount = t.get("amount", "") or fw_re or fw_max; basis = "payable" if t.get("amount") else ("framework_reestimated" if fw_re else ("framework_maximum" if fw_max else ""))
         rows.append(dict(notice_id=notice_id, publication_date=pub, buyer=buyer, buyer_type=btype, procedure=proc, result_code=result, supplier=supplier,
-                         awarded_amount=t.get("amount", ""), estimated_value=estimated, currency=(t.get("currency") or currency), bids=bids, description=desc[:300],
+                         awarded_amount=amount, amount_basis=basis, estimated_value=estimated, currency=(t.get("currency") or fw_cur or currency), bids=bids, description=desc[:300],
                          justification=just[:300], cpv=cpv, lot_id=lot, country=country))
     if not rows:   # notice without lot results: one row with the notice-level fields
-        rows.append(dict(notice_id=notice_id, publication_date=pub, buyer=buyer, buyer_type=btype, procedure=proc, result_code="", supplier="", awarded_amount="",
+        rows.append(dict(notice_id=notice_id, publication_date=pub, buyer=buyer, buyer_type=btype, procedure=proc, result_code="", supplier="", awarded_amount="", amount_basis="",
                          estimated_value=estimated, currency=currency, bids="", description=desc[:300], justification=just[:300], cpv=cpv, lot_id="", country=country))
     return rows
 
@@ -99,7 +108,7 @@ def main():
         r = parse(f)
         if r: n_can += 1; rows += r
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
-    cols = ["notice_id", "publication_date", "buyer", "buyer_type", "procedure", "result_code", "supplier", "awarded_amount", "estimated_value", "currency", "bids", "description", "justification", "cpv", "lot_id", "country"]
+    cols = ["notice_id", "publication_date", "buyer", "buyer_type", "procedure", "result_code", "supplier", "awarded_amount", "amount_basis", "estimated_value", "currency", "bids", "description", "justification", "cpv", "lot_id", "country"]
     with open(a.out, "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=cols); w.writeheader(); w.writerows(rows)
     print(f"{len(files)} xml files scanned; {n_can} contract-award notices; {len(rows)} lot results -> {a.out}", file=sys.stderr)
